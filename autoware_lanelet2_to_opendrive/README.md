@@ -28,7 +28,7 @@ Python 3.10 is required (`>=3.10,<3.11`, locked by CARLA's bindings). Install vi
 uv sync --dev
 ```
 
-This pulls `lanelet2-python-api-for-autoware`, which builds from source against the system `libboost-python`. Hosts running Ubuntu 22.04 with Boost 1.74 (matching CI) are known to work; newer hosts may fail to compile, in which case use the [Docker route](#docker) instead.
+The `lanelet2` and `autoware_lanelet2_extension_python` import paths come from `simple-lanelet2`, a drop-in reimplementation that ships prebuilt wheels — no Boost, no GeographicLib, and no C++ toolchain is needed on the host.
 
 ## Quick usage
 

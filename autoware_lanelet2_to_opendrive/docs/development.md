@@ -144,12 +144,11 @@ uv run python -m autoware_lanelet2_to_opendrive.main \
 
 ## Local Test Verification (Container-Based)
 
-!!! warning "Run dynamic checks inside the container"
-    The runtime dependency `lanelet2-python-api-for-autoware` is built
-    from source against the system Boost. Hosts whose Boost ABI does not
-    match (e.g. Ubuntu 24.04 with Boost 1.83) will fail the wheel build
-    with `RuntimeError: Command failed: make -jN`. The Docker image
-    pins Ubuntu 22.04 with Boost 1.74, matching CI exactly.
+!!! tip "The container is the reference environment"
+    Every dependency now resolves to a prebuilt wheel, so `uv sync` and
+    `uv run pytest` work directly on the host. The container is still
+    what CI runs: it pins Ubuntu 22.04 and CPython 3.10, which is the
+    interpreter the bundled CARLA wheel is built for.
 
 The repository ships a multi-stage `Dockerfile` and `docker-compose.yml`
 with profiles that mirror each CI job:
@@ -185,16 +184,15 @@ uv run mypy --ignore-missing-imports \
     autoware_lanelet2_to_opendrive/test
 ```
 
-If you need to run unit tests without Docker (e.g. for a single test
-file) and your host happens to have a compatible Boost, you can fall
-back to:
+To run unit tests without Docker (e.g. for a single test file):
 
 ```bash
 uv run pytest autoware_lanelet2_to_opendrive/test/<file>.py
 ```
 
-— but if the build fails with the `make -jN` error, defer to the
-container or to CI.
+This works on any host with CPython 3.10, since nothing is built from
+source — but the container is still what CI runs, so use it for the
+full suite before pushing.
 
 ## Contributing
 
@@ -311,8 +309,8 @@ through the standard GitHub release workflow associated with each tag.
   — source format library
 - [Autoware](https://github.com/autowarefoundation/autoware) — target
   platform
-- [tier4/lanelet2_python_api_for_autoware](https://github.com/tier4/lanelet2_python_api_for_autoware)
-  — Lanelet2 Python wrapper used at runtime
+- [hakuturu583/simple_lanelet2](https://github.com/hakuturu583/simple_lanelet2)
+  — Lanelet2 Python API reimplementation used at runtime
 - [CARLA](https://carla.org/) — primary OpenDRIVE consumer
 
 ### Standards and specifications

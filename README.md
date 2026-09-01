@@ -24,7 +24,7 @@ The repository is a [`uv`](https://docs.astral.sh/uv/) workspace with two packag
 
 ## Quick start (Docker)
 
-The Docker route mirrors CI exactly and avoids host build issues with the `lanelet2-python-api-for-autoware` C++ wrapper. The dependency is cloned from a public repository, so no GitHub token is needed.
+The Docker route mirrors CI exactly, pinning the interpreter the local CARLA wheel is built for. Every dependency comes from a public index, so no GitHub token is needed.
 
 ```bash
 # Build the slim conversion image (only needed once, or after dependency changes)
@@ -41,7 +41,7 @@ Arguments are passed verbatim to the `convert` CLI ([Hydra](https://hydra.cc/) s
 
 ## Local development (uv)
 
-For source edits and fast iteration, use `uv` directly. Note that the runtime dependency `lanelet2-python-api-for-autoware` builds from source against system Boost, so host installation is sensitive to the OS — Ubuntu 22.04 with Boost 1.74 (matching CI) is known to work; newer hosts may fail to compile.
+For source edits and fast iteration, use `uv` directly. Every dependency resolves to a prebuilt wheel — `simple-lanelet2` provides the `lanelet2` and `autoware_lanelet2_extension_python` import paths without a C++ toolchain — so `uv sync` works on any Linux host with CPython 3.10, which is what the bundled CARLA wheel requires.
 
 ```bash
 # Install workspace dependencies into a local .venv

@@ -112,7 +112,6 @@ dependencies = [
     { name = "ffmpeg-python" },
     { name = "hydra-core" },
     { name = "jinja2" },
-    { name = "lanelet2-python-api-for-autoware" },
     { name = "numpy" },
     { name = "omegaconf" },
     { name = "opencv-python" },
@@ -121,6 +120,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "pyxodr" },
     { name = "pyyaml" },
+    { name = "simple-lanelet2" },
     { name = "tqdm" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -141,7 +141,6 @@ requires-dist = [
     { name = "ffmpeg-python", specifier = ">=0.2.0" },
     { name = "hydra-core", specifier = ">=1.3.2" },
     { name = "jinja2", specifier = ">=3.1.0" },
-    { name = "lanelet2-python-api-for-autoware", git = "https://github.com/tier4/lanelet2_python_api_for_autoware?rev=21cafbf9a855afbc4b89d4dfc3d299a411b64dde" },
     { name = "numpy", specifier = ">=1.21" },
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "opencv-python", specifier = ">=4.8" },
@@ -150,6 +149,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "pyxodr", specifier = ">=0.1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "simple-lanelet2", specifier = ">=1.1.2" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
@@ -162,12 +162,12 @@ source = { editable = "autoware_lanelet2_to_opendrive" }
 dependencies = [
     { name = "asam-qc-opendrive" },
     { name = "hydra-core" },
-    { name = "lanelet2-python-api-for-autoware" },
     { name = "lxml" },
     { name = "mgrs" },
     { name = "pyxodr" },
     { name = "pyyaml" },
     { name = "scipy" },
+    { name = "simple-lanelet2" },
     { name = "tqdm" },
 ]
 
@@ -175,12 +175,12 @@ dependencies = [
 requires-dist = [
     { name = "asam-qc-opendrive", git = "https://github.com/tier4/qc-opendrive.git?rev=f8b186ba7408f56d26ef6552643cc09d43c0d253" },
     { name = "hydra-core", specifier = ">=1.3.2" },
-    { name = "lanelet2-python-api-for-autoware", git = "https://github.com/tier4/lanelet2_python_api_for_autoware?rev=21cafbf9a855afbc4b89d4dfc3d299a411b64dde" },
     { name = "lxml", specifier = ">=5.2.2" },
     { name = "mgrs", specifier = ">=1.5.0" },
     { name = "pyxodr", specifier = ">=0.1.3" },
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "scipy", specifier = ">=1.9.0" },
+    { name = "simple-lanelet2", specifier = ">=1.1.2" },
     { name = "tqdm", specifier = ">=4.67.1" },
 ]
 
@@ -712,15 +712,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c8/b9/1d50e610ecadebe205b71d6728fd224ce0e0ca6aba7b9cbe1da049203ac5/kiwisolver-1.5.0-pp310-pypy310_pp73-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:b83af57bdddef03c01a9138034c6ff03181a3028d9a1003b301eb1a55e161a3f", size = 79888, upload-time = "2026-03-09T13:15:43.317Z" },
     { url = "https://files.pythonhosted.org/packages/cd/ee/b85ffcd75afed0357d74f0e6fc02a4507da441165de1ca4760b9f496390d/kiwisolver-1.5.0-pp310-pypy310_pp73-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:bf4679a3d71012a7c2bf360e5cd878fbd5e4fcac0896b56393dec239d81529ed", size = 77584, upload-time = "2026-03-09T13:15:44.605Z" },
     { url = "https://files.pythonhosted.org/packages/6b/dd/644d0dde6010a8583b4cd66dd41c5f83f5325464d15c4f490b3340ab73b4/kiwisolver-1.5.0-pp310-pypy310_pp73-win_amd64.whl", hash = "sha256:41024ed50e44ab1a60d3fe0a9d15a4ccc9f5f2b1d814ff283c8d01134d5b81bc", size = 73390, upload-time = "2026-03-09T13:15:45.832Z" },
-]
-
-[[package]]
-name = "lanelet2-python-api-for-autoware"
-version = "0.1.0"
-source = { git = "https://github.com/tier4/lanelet2_python_api_for_autoware?rev=21cafbf9a855afbc4b89d4dfc3d299a411b64dde#21cafbf9a855afbc4b89d4dfc3d299a411b64dde" }
-dependencies = [
-    { name = "matplotlib" },
-    { name = "numpy" },
 ]
 
 [[package]]
@@ -1593,6 +1584,16 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/9c/72/e92f3035ba43e53959007f928315a68fbcf2eeb4e5ededb6f0dc7ff1ecc3/shapely-2.1.2-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:f6f6cd5819c50d9bcf921882784586aab34a4bd53e7553e175dece6db513a6f0", size = 4129260, upload-time = "2025-09-24T13:50:11.183Z" },
     { url = "https://files.pythonhosted.org/packages/42/24/605901b73a3d9f65fa958e63c9211f4be23d584da8a1a7487382fac7fdc5/shapely-2.1.2-cp310-cp310-win32.whl", hash = "sha256:fe9627c39c59e553c90f5bc3128252cb85dc3b3be8189710666d2f8bc3a5503e", size = 1544301, upload-time = "2025-09-24T13:50:12.521Z" },
     { url = "https://files.pythonhosted.org/packages/e1/89/6db795b8dd3919851856bd2ddd13ce434a748072f6fdee42ff30cbd3afa3/shapely-2.1.2-cp310-cp310-win_amd64.whl", hash = "sha256:1d0bfb4b8f661b3b4ec3565fa36c340bfb1cda82087199711f86a88647d26b2f", size = 1722074, upload-time = "2025-09-24T13:50:13.909Z" },
+]
+
+[[package]]
+name = "simple-lanelet2"
+version = "1.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/ac/d8a43a57c14bc04f351d57db22bc0edeaea2102db40c6e3ecf0d13afa36c/simple_lanelet2-1.1.2.tar.gz", hash = "sha256:cdf42fd3da3ac2ca891e437288d7c1ecf18614e50e998c69298250e80ffdc27c", size = 226595, upload-time = "2026-08-10T01:44:08.844Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/b3/6226b91b4d206e8f8ace94421c9640972d7c6d77ad3f464f86e3af710ee8/simple_lanelet2-1.1.2-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:886736864309e540f969d2e65cf3cd7e8148bbd8f7cbeeb548390d0695e8ca69", size = 924723, upload-time = "2026-08-10T01:44:05.655Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/26/8f191731c655e7c6d148f78a41472e801483305ab933d60504da5e7f28a4/simple_lanelet2-1.1.2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:413028cde3193861f163b1375ea639368678f5e226f4c689810b99259412a796", size = 953260, upload-time = "2026-08-10T01:44:07.398Z" },
 ]
 
 [[package]]

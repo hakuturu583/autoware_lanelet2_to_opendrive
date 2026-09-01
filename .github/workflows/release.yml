@@ -42,7 +42,6 @@ jobs:
       - name: Setup base environment
         uses: ./.github/actions/setup-env
         with:
-          install-system-deps: "false"
           install-dev-deps: "false"
 
       - name: Get merged PR labels
@@ -211,7 +210,6 @@ jobs:
         if: steps.pr-labels.outputs.bump_type != 'none'
         uses: ./.github/actions/setup-env
         with:
-          install-system-deps: "true"
           install-dev-deps: "true"
           carla-extra: "carla"
 
@@ -350,7 +348,6 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-env
         with:
-          install-system-deps: "true"
           install-dev-deps: "true"
           carla-extra: "carla"
 

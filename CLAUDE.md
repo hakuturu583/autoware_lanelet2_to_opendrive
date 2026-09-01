@@ -34,11 +34,11 @@ uv venv
 
 ## Local Test Verification (Container-Based)
 
-**IMPORTANT**: Run local test verification inside the Docker container, not directly on the host.
+**IMPORTANT**: Prefer running local test verification inside the Docker container; it is what CI runs.
 
 ### Why
 
-The runtime dependency `lanelet2-python-api-for-autoware` is built from source against system Boost. Many host environments (e.g., Ubuntu 24.04 with Boost 1.83) cannot compile it — `uv sync` and `uv run pytest` fail with `RuntimeError: Command failed: make -j24` during the wheel build. The Docker image pins Ubuntu 22.04 with Boost 1.74, matching CI exactly, and avoids this failure.
+The container pins Ubuntu 22.04 and CPython 3.10, matching CI exactly, so a run inside it is the one that predicts CI. Host runs no longer *fail* — since the Lanelet2 binding became `simple-lanelet2`, which ships prebuilt wheels, `uv sync` and `uv run pytest` work on any Linux host with CPython 3.10 — but they run against whatever interpreter and system libraries the host happens to have.
 
 ### How
 
@@ -59,16 +59,14 @@ docker compose --profile dev run --rm dev
 
 When the user asks to "run the tests", "verify locally", or otherwise validate a change end-to-end:
 
-1. **Do NOT run `uv run pytest` on the host.** It will likely fail on the Boost build step, producing noise unrelated to the change.
-2. **Use `docker compose --profile test run --rm pytest`** for the full suite, or the appropriate profile (`lint`, `qc`, `carla`) for a narrower check.
-3. If the container is unavailable in the current environment (e.g., Docker not installed), say so explicitly rather than running broken host commands. Defer test verification to CI in that case.
-4. Static checks that do **not** import the package (e.g., `ruff`, `ruff-format`, `mypy --ignore-missing-imports` on individual files) **can** still be run on the host and should be used for fast iteration.
+1. **Prefer `docker compose --profile test run --rm pytest`** for the full suite, or the appropriate profile (`lint`, `qc`, `carla`) for a narrower check — it is what CI runs.
+2. **`uv run pytest` on the host is a valid fallback** when Docker is unavailable. Say which one you used, and treat a host-only pass as weaker evidence than a container pass.
+3. Static checks that do **not** import the package (e.g., `ruff`, `ruff-format`, `mypy --ignore-missing-imports` on individual files) can be run on the host and should be used for fast iteration.
 
 ### Rationale
 
 - **Reproducibility**: Container matches CI exactly; host doesn't.
-- **Avoids false negatives**: Host build failures are an environment quirk, not a code defect.
-- **Fast iteration**: Static checks on the host stay fast; dynamic test verification gets pushed to a known-good environment.
+- **Fast iteration**: Static checks on the host stay fast; full verification happens in a known-good environment.
 
 ## Pre-commit Hooks and Lint Checking
 
@@ -212,8 +210,8 @@ If pre-commit hooks fail:
 
 ## Dependencies
 
-- **lanelet2** (>=1.2.2) - Core library for working with Lanelet2 map format
-- Python 3.10 or higher is required
+- **simple-lanelet2** (>=1.1.2) - Provides the `lanelet2` and `autoware_lanelet2_extension_python` import paths; a drop-in reimplementation of the Lanelet2 Python API with a Rust core, distributed as prebuilt wheels
+- Python 3.10 exactly (`>=3.10,<3.11`), pinned by the bundled CARLA wheel
 
 ## Architecture Notes
 

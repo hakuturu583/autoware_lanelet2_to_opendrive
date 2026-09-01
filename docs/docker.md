@@ -19,9 +19,9 @@ system libraries directly on their host.
 | `convert` | `l2o-convert:local` | Slim runtime image whose entrypoint is the `convert` CLI. Reuses the same `.venv` as `dev` and is intended for end users who only need conversion. |
 
 Both images install the workspace via a single `uv sync --dev` invocation.
-Splitting that into separate runtime and dev syncs was attempted but produced
-non-deterministic builds of `lanelet2-python-api-for-autoware`'s C++ wrapper
-shared libraries — the single-sync approach is slightly larger but reliable.
+Every dependency resolves to a prebuilt wheel, so this is one download step
+with nothing compiled; splitting it into separate runtime and dev syncs would
+only trade a smaller layer for a second resolution of the same lock.
 
 ## CI-equivalent local jobs
 
@@ -108,16 +108,10 @@ container runs as root by default; on Linux you can run with `--user
 `pyproject.toml` was modified without regenerating `uv.lock`. Run
 `uv lock` on the host, commit the updated `uv.lock`, then rebuild.
 
-### `import lanelet2 ... cannot open shared object file: liblanelet2_*.so`
+### `import lanelet2 ... ModuleNotFoundError` or a stale package version
 
-The dynamic loader couldn't find lanelet2's bundled libraries. The base image
-sets `LD_LIBRARY_PATH=/workspace/.venv/lib/python3.10/site-packages/lanelet2/lib`
-to fix this — if you derived a custom image, make sure that env is preserved.
-
-### `import autoware_lanelet2_extension_python ... SystemError: initialization`
-
-Your `venv-cache` named volume contains a `.venv` from an earlier image build
-whose native bindings were broken. Delete the volume and re-run:
+Your `venv-cache` named volume contains a `.venv` from an earlier image build,
+predating a dependency change. Delete the volume and re-run:
 
 ```bash
 docker volume rm "$(basename "$PWD")_venv-cache"

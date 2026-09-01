@@ -1,17 +1,14 @@
 name: Setup Environment
 description: >
-  Common CI environment setup: Python, uv, optional system dependencies,
-  optional uv sync --dev, and optional pre-commit execution.
+  Common CI environment setup: Python, uv, optional uv sync --dev, and
+  optional pre-commit execution. Every dependency resolves to a prebuilt
+  wheel, so no apt packages are installed here.
 
 inputs:
   python-version:
     description: Python version to set up
     required: false
     default: "3.10"
-  install-system-deps:
-    description: Install apt system dependencies (libboost, libeigen3, etc.)
-    required: false
-    default: "true"
   install-dev-deps:
     description: Run 'uv sync --dev' to install Python dependencies
     required: false
@@ -31,8 +28,8 @@ inputs:
   cache-suffix:
     description: >
       Suffix appended to the uv cache key. Use this to isolate caches between
-      runner backends (e.g. ubicloud-* vs ubuntu-*) so prebuilt wheels with a
-      different libstdc++/boost-python ABI don't get reused on the wrong host.
+      runner backends (e.g. ubicloud-* vs ubuntu-*) so wheels built against a
+      different libstdc++ don't get reused on the wrong host.
     required: false
     default: ""
 
@@ -56,22 +53,6 @@ runs:
         enable-cache: ${{ inputs.install-dev-deps }}
         cache-dependency-glob: "**/uv.lock"
         cache-suffix: ${{ inputs.cache-suffix }}
-
-    - name: Install system dependencies
-      if: inputs.install-system-deps == 'true'
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libboost-dev \
-          libeigen3-dev \
-          libpugixml-dev \
-          libgeographic-dev \
-          libboost-python-dev \
-          libboost-serialization-dev \
-          librange-v3-dev \
-          libboost-filesystem-dev \
-          libboost-program-options-dev
 
     - name: Install Python dependencies
       if: inputs.install-dev-deps == 'true'

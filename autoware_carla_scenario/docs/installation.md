@@ -6,7 +6,7 @@ This guide will help you install the `autoware-carla-scenario` package.
 
 ### Operating System
 
-- **Linux** (Ubuntu 22.04 is the reference; CI uses 22.04 with Boost 1.74)
+- **Linux** (Ubuntu 22.04 is the reference; CI uses 22.04)
 
 ### Python Version
 
@@ -72,16 +72,15 @@ This package is part of a workspace that also contains
     ```
 
 !!! note
-    The runtime dependency `lanelet2-python-api-for-autoware` is built
-    from source against system Boost. Hosts whose Boost version differs
-    from the CI image (Ubuntu 22.04 / Boost 1.74) may fail during
-    `uv sync`. In that case, use the Docker workflow described below.
+    Every dependency resolves to a prebuilt wheel, so `uv sync` needs no
+    C++ toolchain. The interpreter is the one constraint: the bundled
+    CARLA wheel is CPython-3.10 only.
 
 ## Container-Based Installation
 
 The repository ships a multi-stage `Dockerfile` and `docker-compose.yml`
-at its root. The Docker image pins Ubuntu 22.04 and matches CI exactly,
-which avoids the Boost ABI issues mentioned above.
+at its root. The Docker image pins Ubuntu 22.04 and CPython 3.10, matching
+CI exactly, so it is the way to reproduce a CI run locally.
 
 ```bash
 # Open an interactive development shell (workspace bind-mounted).
@@ -132,7 +131,7 @@ The package's runtime dependencies (declared in `pyproject.toml`):
 - `numpy>=1.21`
 - `pytest>=9.0.1`
 - `python-dotenv>=1.2.2`
-- `lanelet2-python-api-for-autoware` — the Lanelet2 binding (provided
+- `simple-lanelet2>=1.1.2` — the Lanelet2 binding (provided
   via the workspace; see the note in
   `autoware_lanelet2_to_opendrive/pyproject.toml`)
 - `tqdm>=4.67.1`
@@ -153,8 +152,9 @@ Ensure that:
 1. You're using Python 3.10 (`>=3.10,<3.11`).
 2. The package was installed in your active environment (`uv sync` from
    the workspace root, or a fresh `uv venv` followed by `uv sync`).
-3. If you see `ImportError: ... lanelet2 ...`, your Boost version may
-   not match the wheel's expectation — switch to the Docker workflow.
+3. If you see `ImportError: ... lanelet2 ...`, another distribution may
+   own the same import path — the PyPI `lanelet2` package, or a ROS
+   `lanelet2` on `PYTHONPATH`. Recreate the venv, or use Docker.
 
 ### CARLA Connection Issues
 
