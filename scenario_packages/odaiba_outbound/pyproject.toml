@@ -1,0 +1,29 @@
+[project]
+name = "odaiba-outbound"
+version = "0.1.0"
+description = "Odaiba outbound closed-loop scenario (autoware_ego)"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    # The framework provides the public API (register_scenario,
+    # register_conf_dir, BaseScenario, the shared config dataclasses, ...).
+    "autoware-carla-scenario",
+]
+
+# This entry point makes the package discoverable: when it is installed,
+# `uv run scenario ...` calls `odaiba_outbound:register` automatically at
+# start-up, which registers the scenario and its conf dir.
+[project.entry-points."autoware_carla_scenario.scenarios"]
+odaiba_outbound = "odaiba_outbound:register"
+
+[build-system]
+requires = ["uv_build>=0.9.7,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# Note the table name: uv reads `tool.uv.build-backend` and silently ignores
+# any other spelling, so a misconfigured manifest looks fine until you unzip
+# the wheel. Name every top-level module you ship -- add an entry here if this
+# package grows a second one (a `hydra_plugins/` namespace package of its own,
+# say), or the backend will guess a single module from the distribution name
+# and drop the rest.
+module-name = ["odaiba_outbound"]

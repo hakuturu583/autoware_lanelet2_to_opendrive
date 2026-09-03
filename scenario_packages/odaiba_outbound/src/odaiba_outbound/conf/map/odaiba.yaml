@@ -1,0 +1,14 @@
+# @package _global_
+# Odaiba map configuration (lanelet2-only, no OpenDRIVE).
+#
+# No `xodr_path` is set: the framework loads this as a lanelet2-only map, so a
+# scenario selecting `map=odaiba` must express positions in Lanelet2 coordinates
+# (OpenDRIVE-based conditions are rejected before the run starts).
+#
+# `lanelet2_path` defaults to the map bundled inside this package -- register()
+# sets ODAIBA_LANELET2_PATH to that bundled file if it is not already set, so
+# `scenario=odaiba_outbound/default` works out of the box.  Override with:
+#   uv run scenario map=odaiba map.lanelet2_path=/other/path.osm
+map:
+  name: OdaibaMap
+  lanelet2_path: ${oc.env:ODAIBA_LANELET2_PATH}
