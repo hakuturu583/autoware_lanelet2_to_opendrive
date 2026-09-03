@@ -1,0 +1,6 @@
+<div class="rounded-lg border px-4 py-2 text-sm
+            {% if tone == 'ok' %}border-green-200 bg-green-50 text-green-800
+            {% elif tone == 'error' %}border-red-200 bg-red-50 text-red-800
+            {% else %}border-gray-200 bg-white text-gray-700{% endif %}">
+  {{ message }}
+</div>

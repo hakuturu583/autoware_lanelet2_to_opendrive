@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Scenario Editor{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <link rel="stylesheet" href="/static/editor.css">
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800">
+  <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-[1600px] mx-auto px-4 py-3 flex items-center justify-between gap-4">
+      <div class="flex items-baseline gap-3 min-w-0">
+        <a href="/" class="text-xl font-bold text-gray-800 hover:text-blue-600 transition-colors">
+          Scenario Editor
+        </a>
+        {% block subtitle %}{% endblock %}
+      </div>
+      <div class="flex items-center gap-2">
+        {% block actions %}{% endblock %}
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-[1600px] mx-auto px-4 py-4">
+    {% block content %}{% endblock %}
+  </main>
+
+  <datalist id="ref-values">
+    <option value="${map.no_3d_model_lanelet_ids}"></option>
+  </datalist>
+
+  <script src="/static/editor.js"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,22 @@
+{# The single htmx swap target for every edit: canvas, inspector and validation
+   are re-rendered together so they can never drift apart. #}
+<div id="validation" class="mb-3">
+  {% include "partials/validation.html" %}
+</div>
+
+{% if error %}
+  <div class="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+    {{ error }}
+  </div>
+{% endif %}
+
+<div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-4">
+  <div class="min-w-0">
+    {% include "partials/canvas.html" %}
+  </div>
+  <aside class="min-w-0">
+    <div id="inspector" class="sticky top-20">
+      {% include "partials/inspector.html" %}
+    </div>
+  </aside>
+</div>

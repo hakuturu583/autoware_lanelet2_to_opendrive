@@ -1,0 +1,52 @@
+{# Save Draft and Export Package are deliberately separate: saving keeps working
+   state, exporting produces a directory whose dependencies are frozen. #}
+<div id="export-panel" class="hidden mb-4 bg-white rounded-lg border border-gray-200">
+  <header class="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+    <div>
+      <h2 class="text-sm font-semibold text-gray-700">Export Scenario Package</h2>
+      <p class="text-xs text-gray-400">
+        Produces a directory another machine can copy, <code>uv sync --locked</code> and run.
+      </p>
+    </div>
+    <button class="ed-btn-ghost" onclick="toggleExportPanel()">Close</button>
+  </header>
+  <form class="p-4 grid grid-cols-1 md:grid-cols-2 gap-4"
+        hx-post="/draft/{{ draft.id }}/export"
+        hx-target="#export-result" hx-swap="innerHTML"
+        hx-indicator="#export-spinner">
+    <div>
+      <label class="ed-label">Destination directory</label>
+      <input type="text" name="destination" class="ed-input font-mono text-xs" value="{{ export_dir }}">
+      <p class="ed-help">The package is created inside this directory, named after the scenario.</p>
+    </div>
+    <div class="space-y-2">
+      <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="lock" value="on" checked class="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600">
+        <span>Generate <code>uv.lock</code><span class="block ed-help">Off produces a package that is not reproducible.</span></span>
+      </label>
+      <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="verify" value="on" checked class="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600">
+        <span>Verify with <code>uv sync --locked</code></span>
+      </label>
+      <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="run_tests" value="on" checked class="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600">
+        <span>Run the generated package's tests</span>
+      </label>
+      <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="dev_mode" value="on" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600">
+        <span>Development export<span class="block ed-help">Depends on the local framework checkout by path. Not portable.</span></span>
+      </label>
+      <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="force" value="on" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600">
+        <span>Replace an existing package of the same name</span>
+      </label>
+    </div>
+    <div class="md:col-span-2 flex items-center gap-3">
+      <button type="submit" class="ed-btn-primary">Export Package</button>
+      <span id="export-spinner" class="htmx-indicator text-sm text-blue-600">
+        Resolving dependencies &mdash; this can take a minute&hellip;
+      </span>
+    </div>
+  </form>
+  <div id="export-result" class="px-4 pb-4"></div>
+</div>

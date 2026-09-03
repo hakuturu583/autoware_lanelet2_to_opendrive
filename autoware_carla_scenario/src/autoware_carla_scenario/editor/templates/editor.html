@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ document.title }} &middot; Scenario Editor{% endblock %}
+
+{% block subtitle %}
+  <span class="text-sm text-gray-400">/</span>
+  <span class="text-sm font-medium text-gray-600 truncate">{{ document.title }}</span>
+  <span class="text-xs font-mono text-gray-400">{{ document.id }}</span>
+{% endblock %}
+
+{% block actions %}
+  <a href="/draft/{{ draft.id }}/yaml" target="_blank" rel="noopener"
+     class="ed-btn-ghost">Scenario IR</a>
+  <button class="ed-btn"
+          hx-post="/draft/{{ draft.id }}/validate"
+          hx-target="#validation"
+          hx-swap="innerHTML">Validate</button>
+  <button class="ed-btn"
+          hx-post="/draft/{{ draft.id }}/save"
+          hx-target="#status"
+          hx-swap="innerHTML">Save Draft</button>
+  <button class="ed-btn-primary" onclick="toggleExportPanel()">Export Package</button>
+{% endblock %}
+
+{% block content %}
+  <div id="status" class="mb-3"></div>
+  {% include "partials/export_panel.html" %}
+  <div id="editor-body">
+    {% include "partials/editor_body.html" %}
+  </div>
+{% endblock %}

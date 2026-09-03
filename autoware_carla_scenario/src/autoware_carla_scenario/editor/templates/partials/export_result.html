@@ -1,0 +1,33 @@
+{% if result %}
+  <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+    <p class="text-sm font-semibold text-green-900">Package exported</p>
+    <p class="text-sm text-green-800 font-mono mt-1">{{ result.root }}</p>
+    <ul class="text-xs text-green-800 mt-2 space-y-0.5">
+      <li>Framework: {{ result.pin.kind }}
+        {%- if result.pin.commit %} @ <span class="font-mono">{{ result.pin.commit[:12] }}</span>
+        {%- elif result.pin.version %} <span class="font-mono">{{ result.pin.version }}</span>{% endif %}</li>
+      <li>Python: <span class="font-mono">{{ result.manifest.runtime.python }}</span></li>
+      <li>uv: <span class="font-mono">{{ result.manifest.runtime.uv or 'not recorded' }}</span></li>
+      <li>uv.lock generated: {{ 'yes' if result.locked else 'no' }}</li>
+      <li><code>uv sync --locked</code> verified: {{ 'yes' if result.verified else 'no' }}</li>
+      <li>Package tests passed: {{ 'yes' if result.tested else 'no' }}</li>
+    </ul>
+    {% if result.warnings %}
+      <ul class="text-xs text-amber-800 mt-2 space-y-0.5">
+        {% for warning in result.warnings %}<li>&#9888; {{ warning }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+{% else %}
+  <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+    <p class="text-sm font-semibold text-red-900">Export failed &mdash; nothing was written</p>
+    <p class="text-sm text-red-800 mt-1">{{ error }}</p>
+  </div>
+{% endif %}
+
+{% if log %}
+  <details class="mt-3">
+    <summary class="text-xs text-gray-500 cursor-pointer">Export log</summary>
+    <pre class="ed-log">{{ log }}</pre>
+  </details>
+{% endif %}

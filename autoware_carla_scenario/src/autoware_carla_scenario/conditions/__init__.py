@@ -12,6 +12,7 @@ from .base import (
 from .collision import CollisionCondition
 from .comparison import ComparisonRule, ScalarComparisonRule, compare
 from .composition import (
+    EntityDistanceCondition,
     EntityInAreaCondition,
     EntityLanePositionCondition,
     SpeedCondition,
@@ -19,6 +20,7 @@ from .composition import (
     SpeedDirection,
     StandstillCondition,
     TemporaryStopCondition,
+    TimeToCollisionCondition,
     WaypointCheckType,
     WaypointCondition,
 )
@@ -40,6 +42,7 @@ __all__ = [
     "ConditionStatus",
     "compare",
     "ElapsedTimeCondition",
+    "EntityDistanceCondition",
     "EntityExistenceCondition",
     "EntityInAreaCondition",
     "EntityLanePositionCondition",
@@ -54,6 +57,7 @@ __all__ = [
     "StandstillCondition",
     "StickyCondition",
     "TemporaryStopCondition",
+    "TimeToCollisionCondition",
     "TimeoutCondition",
     "WaypointCheckType",
     "WaypointCondition",
