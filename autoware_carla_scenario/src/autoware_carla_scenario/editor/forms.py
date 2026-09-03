@@ -10,18 +10,12 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping, Sequence
 
-from ..authoring.registry import FieldSpec
+from ..authoring.registry import REFERENCE_PATTERN, TRUTHY_VALUES, FieldSpec
 
 __all__ = ["parse_int_list", "parse_params", "parse_value"]
 
 #: Separators accepted in a list-of-integers field: commas, spaces, newlines.
 _LIST_SEPARATORS = re.compile(r"[,\s]+")
-
-#: An OmegaConf interpolation, kept verbatim so the sweep YAML resolves it.
-_REFERENCE = re.compile(r"^\$\{[^}]+\}$")
-
-#: Values a checked HTML checkbox may submit.
-_TRUTHY = {"1", "true", "on", "yes"}
 
 
 def parse_int_list(raw: Any) -> Any:
@@ -31,7 +25,7 @@ def parse_int_list(raw: Any) -> Any:
     text = str(raw or "").strip()
     if not text:
         return []
-    if _REFERENCE.match(text):
+    if REFERENCE_PATTERN.match(text):
         return text
     return [int(part) for part in _LIST_SEPARATORS.split(text) if part]
 
@@ -46,7 +40,9 @@ def parse_value(spec: FieldSpec, raw: Any, *, present: bool) -> Any:
             unchecked checkbox, which submits nothing.
     """
     if spec.kind == "bool":
-        return present and str(raw if raw is not None else "on").lower() in _TRUTHY
+        return (
+            present and str(raw if raw is not None else "on").lower() in TRUTHY_VALUES
+        )
 
     text = raw if raw is not None else ""
     if isinstance(text, str):

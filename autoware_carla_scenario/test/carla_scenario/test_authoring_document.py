@@ -152,14 +152,59 @@ class TestValidation:
             "PASS condition" in i.message for i in validate_document(document).errors
         )
 
-    def test_constraint_shape_is_enforced(self) -> None:
+    def test_a_childless_composition_is_an_error(self) -> None:
         document = new_document()
         npc = document.entity("npc1")
         assert npc is not None
         npc.spawn.constraints = [ConstraintNode(type="not")]
         assert any(
-            "exactly one child" in i.message for i in validate_document(document).errors
+            "at least one child constraint" in i.message
+            for i in validate_document(document).errors
         )
+
+    def test_an_overfull_wrapper_is_an_error(self) -> None:
+        """``not`` takes one child, so a second one is rejected rather than dropped."""
+        document = new_document()
+        npc = document.entity("npc1")
+        assert npc is not None
+        npc.spawn.constraints = [
+            ConstraintNode(
+                type="not",
+                constraints=[
+                    ConstraintNode(type="is_junction"),
+                    ConstraintNode(type="has_stop_line"),
+                ],
+            )
+        ]
+        assert any(
+            "at most 1 child constraint" in i.message
+            for i in validate_document(document).errors
+        )
+
+    def test_a_leaf_constraint_takes_no_children(self) -> None:
+        document = new_document()
+        npc = document.entity("npc1")
+        assert npc is not None
+        npc.spawn.constraints = [
+            ConstraintNode(
+                type="is_junction",
+                constraints=[ConstraintNode(type="has_stop_line")],
+            )
+        ]
+        assert any(
+            "does not take child constraints" in i.message
+            for i in validate_document(document).errors
+        )
+
+    def test_a_wrapper_serialises_its_child_the_way_the_sweeper_reads_it(self) -> None:
+        """One child list in the IR; the sweeper's singular ``constraint`` key out."""
+        node = ConstraintNode(
+            type="not", constraints=[ConstraintNode(type="is_junction")]
+        )
+        assert node.to_sweep_dict() == {
+            "type": "not",
+            "constraint": {"type": "is_junction"},
+        }
 
     def test_a_second_constraint_search_warns_about_the_sweeper_limit(self) -> None:
         """The sweeper enumerates one target key; the rest keep their defaults."""

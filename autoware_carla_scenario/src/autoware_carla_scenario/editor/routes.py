@@ -26,7 +26,7 @@ from ..authoring.models import ScenarioDocument
 from ..authoring.package_export import PackageExportError, export_package
 from ..authoring.persistence import Draft, dump_document_yaml
 from . import map_preview
-from .service import EditorError, EditorService
+from .service import EditorError, EditorService, find_constraint
 
 logger = logging.getLogger(__name__)
 
@@ -52,38 +52,28 @@ def _templates(request: Request) -> Any:
 
 def _resolve_target(
     document: ScenarioDocument, object_id: str
-) -> tuple[str, Optional[Any]]:
-    """Return ``(kind, object)`` for an inspector target id.
+) -> tuple[str, Optional[Any], Optional[str]]:
+    """Return ``(kind, object, constraint_owner)`` for an inspector target id.
 
     ``kind`` is one of ``scenario``, ``entity``, ``action``, ``condition``,
-    ``constraint`` or ``missing``.
+    ``constraint`` or ``missing``.  ``constraint_owner`` is the id of the entity
+    whose spawn search holds the object, and is set for constraints only.
     """
     if not object_id or object_id == "scenario":
-        return "scenario", document
+        return "scenario", document, None
     entity = document.entity(object_id)
     if entity is not None:
-        return "entity", entity
+        return "entity", entity, None
     action = document.action(object_id)
     if action is not None:
-        return "action", action
+        return "action", action, None
     condition = document.condition(object_id)
     if condition is not None:
-        return "condition", condition
-    for owner in document.entities:
-        for root in owner.spawn.constraints:
-            for node in root.walk():
-                if node.id == object_id:
-                    return "constraint", node
-    return "missing", None
-
-
-def _constraint_owner(document: ScenarioDocument, node_id: str) -> Optional[str]:
-    """Return the id of the entity whose spawn holds constraint *node_id*."""
-    for entity in document.entities:
-        for root in entity.spawn.constraints:
-            if any(node.id == node_id for node in root.walk()):
-                return entity.id
-    return None
+        return "condition", condition, None
+    owner, constraint = find_constraint(document, object_id)
+    if constraint is not None:
+        return "constraint", constraint, owner
+    return "missing", None, None
 
 
 def _context(
@@ -92,6 +82,7 @@ def _context(
     selected: str = "scenario",
     *,
     error: str = "",
+    validate: bool = True,
 ) -> dict[str, Any]:
     """Build the template context shared by every editor render.
 
@@ -99,23 +90,22 @@ def _context(
     so deleting the object the inspector was showing leaves a usable panel
     rather than an empty one.
     """
+    service = _service(request)
     document = draft.document
-    kind, target = _resolve_target(document, selected)
+    kind, target, constraint_owner = _resolve_target(document, selected)
     if kind == "missing":
         kind, target, selected = "scenario", document, "scenario"
     return {
         "draft": draft,
         "document": document,
-        "report": _service(request).validate(draft),
+        "report": service.validate(draft) if validate else None,
         "selected": selected,
         "selected_kind": kind,
         "target": target,
-        "constraint_owner": (
-            _constraint_owner(document, selected) if kind == "constraint" else None
-        ),
+        "constraint_owner": constraint_owner,
         "error": error,
         "map_loaded": map_preview.is_map_loaded(document),
-        "export_dir": str(_service(request).export_dir),
+        "export_dir": str(service.export_dir),
         "page": "editor",
     }
 
@@ -197,7 +187,7 @@ def canvas(request: Request, draft_id: str, selected: str = "scenario") -> HTMLR
     return _templates(request).TemplateResponse(
         request=request,
         name="partials/canvas.html",
-        context=_context(request, draft, selected),
+        context=_context(request, draft, selected, validate=False),
     )
 
 
@@ -208,7 +198,7 @@ def inspector(request: Request, draft_id: str, object_id: str) -> HTMLResponse:
     return _templates(request).TemplateResponse(
         request=request,
         name="partials/inspector.html",
-        context=_context(request, draft, object_id),
+        context=_context(request, draft, object_id, validate=False),
     )
 
 

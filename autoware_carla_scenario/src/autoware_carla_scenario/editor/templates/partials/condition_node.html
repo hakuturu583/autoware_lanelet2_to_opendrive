@@ -27,7 +27,7 @@
           {{ render(child, draft, selected, document, depth + 1) }}
         {% endfor %}
         {% if spec.max_children is none or node.children|length < spec.max_children %}
-          {{ add_child(draft, node) }}
+          {{ add(draft, 'node:' ~ node.id) }}
         {% endif %}
       </div>
     </div>
@@ -50,12 +50,15 @@
 {% endmacro %}
 
 
-{% macro add_child(draft, node) %}
+{# The type picker stays folded away until asked for: an always-open select in
+   every lane and every composition reads as content, and there are a lot of
+   them.  `<details>` gets that for free, with no JavaScript and no popover. #}
+{% macro add(draft, slot) %}
   <details class="ed-add">
     <summary class="ed-add-btn" title="Add a predicate">{{ ic.icon('plus', 11) }} predicate</summary>
     <form hx-post="/draft/{{ draft.id }}/predicate" hx-target="#editor-body" hx-swap="innerHTML"
           class="ed-add-form">
-      <input type="hidden" name="slot" value="node:{{ node.id }}">
+      <input type="hidden" name="slot" value="{{ slot }}">
       <select name="type_id" class="ed-input-xs" style="flex:1">
         {% for spec in condition_specs() %}
           <option value="{{ spec.type_id }}">{{ spec.category }} · {{ spec.title }}</option>

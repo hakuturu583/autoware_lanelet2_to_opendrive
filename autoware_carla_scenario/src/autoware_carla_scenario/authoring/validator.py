@@ -259,29 +259,20 @@ def _check_constraint(out: _Collector, path: str, node: ConstraintNode) -> None:
         _check_field(out, path, field_spec, node.params, set(), node.id)
     _check_unknown_params(out, path, spec.fields, node.params, node.id)
 
-    if spec.kind == "composite":
-        if not node.constraints:
-            out.error(
-                path, f"{spec.title} needs at least one child constraint.", node.id
-            )
-        if node.constraint is not None:
-            out.error(
-                path, f"{spec.title} uses 'constraints', not 'constraint'.", node.id
-            )
-    elif spec.kind == "wrapper":
-        if node.constraint is None:
-            out.error(path, f"{spec.title} needs exactly one child.", node.id)
-        if node.constraints:
-            out.error(
-                path, f"{spec.title} uses 'constraint', not 'constraints'.", node.id
-            )
-    elif node.constraints or node.constraint is not None:
-        out.error(path, f"{spec.title} does not take child constraints.", node.id)
+    count = len(node.constraints)
+    limit = spec.max_children
+    if limit == 0:
+        if count:
+            out.error(path, f"{spec.title} does not take child constraints.", node.id)
+    elif not count:
+        out.error(path, f"{spec.title} needs at least one child constraint.", node.id)
+    elif limit is not None and count > limit:
+        out.error(
+            path, f"{spec.title} takes at most {limit} child constraint(s).", node.id
+        )
 
     for index, child in enumerate(node.constraints):
         _check_constraint(out, f"{path}.constraints[{index}]", child)
-    if node.constraint is not None:
-        _check_constraint(out, f"{path}.constraint", node.constraint)
 
 
 def _check_action(

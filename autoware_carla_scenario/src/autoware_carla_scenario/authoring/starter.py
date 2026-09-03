@@ -126,14 +126,16 @@ def new_document(
                         ),
                         ConstraintNode(
                             type="not",
-                            constraint=ConstraintNode(type="is_junction"),
+                            constraints=[ConstraintNode(type="is_junction")],
                         ),
                         ConstraintNode(
                             type="not",
-                            constraint=ConstraintNode(
-                                type="in_set",
-                                params={"values": "${map.no_3d_model_lanelet_ids}"},
-                            ),
+                            constraints=[
+                                ConstraintNode(
+                                    type="in_set",
+                                    params={"values": "${map.no_3d_model_lanelet_ids}"},
+                                )
+                            ],
                         ),
                     ],
                 )

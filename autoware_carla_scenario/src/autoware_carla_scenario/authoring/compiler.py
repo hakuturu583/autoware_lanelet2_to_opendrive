@@ -25,8 +25,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from ..constants import EGO_ROLE_NAME
 from .models import ActionNode, ConditionNode, Entity, ScenarioDocument
 from .registry import (
+    TRUTHY_VALUES,
     ActionSpec,
     ConditionSpec,
     FieldSpec,
@@ -45,10 +47,10 @@ __all__ = [
     "compile_document",
 ]
 
-#: Role name the framework reserves for the ego vehicle.  Duplicated from
-#: :mod:`autoware_carla_scenario.constants` so that compiling stays free of the
-#: package's heavier import graph; ``test_authoring_compiler`` pins them together.
-EGO_ROLE = "Ego"
+#: Role name the framework reserves for the ego vehicle.  ``constants`` pulls in
+#: only ``entity_role``, so taking it from there costs the editor nothing and
+#: leaves one definition of the name.
+EGO_ROLE = str(EGO_ROLE_NAME)
 
 
 class CompilationError(Exception):
@@ -82,7 +84,7 @@ def _coerce_one(spec: FieldSpec, value: Any) -> Any:
     if spec.kind == "bool":
         if isinstance(value, bool):
             return value
-        return str(value).strip().lower() in ("1", "true", "on", "yes")
+        return str(value).strip().lower() in TRUTHY_VALUES
     if spec.kind in ("int_list", "int_list_or_ref"):
         if isinstance(value, str):
             # A reference such as ${map.no_3d_model_lanelet_ids} passes through

@@ -30,16 +30,15 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
-import yaml
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
+from ..templating import code_environment
 from .framework_pin import Pin, PinResolutionError, resolve_framework_pin
 from .hydra_config import dump_scenario_config
 from .models import ScenarioDocument
-from .persistence import dump_document_yaml
+from .persistence import dump_document_yaml, dump_yaml
 from .validator import validate_document
 
 logger = logging.getLogger(__name__)
@@ -159,8 +158,13 @@ def _uv_version() -> Optional[str]:
     return match.group(1) if match else None
 
 
+@lru_cache(maxsize=1)
 def _requires_python() -> str:
-    """Return the framework's own ``requires-python``, or a safe fallback."""
+    """Return the framework's own ``requires-python``, or a safe fallback.
+
+    Installed metadata cannot change while the process runs, so this is read
+    from disk once however many packages get exported.
+    """
     from importlib import metadata  # noqa: PLC0415
 
     try:
@@ -193,18 +197,6 @@ def _editor_version() -> Optional[str]:
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
-
-
-def _environment() -> Environment:
-    """Build the Jinja environment used for the generated package."""
-    return Environment(
-        loader=FileSystemLoader(str(TEMPLATES_DIR)),
-        autoescape=False,  # we render code and config, never HTML
-        keep_trailing_newline=True,
-        trim_blocks=True,
-        lstrip_blocks=True,
-        undefined=StrictUndefined,
-    )
 
 
 def _render_source_entry(pin: Pin) -> str:
@@ -267,10 +259,12 @@ def _write_package_tree(
     warnings: list[str],
 ) -> dict[str, str]:
     """Render every file of the package under *root*.  Returns the file map."""
-    env = _environment()
+    env = code_environment(TEMPLATES_DIR)
     package_name = names["package_name"]
     scenario_id = names["scenario_id"]
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    pins = _pins(pin)
+    sources = [(p.distribution, _render_source_entry(p)) for p in pins]
 
     context: dict[str, Any] = {
         **names,
@@ -278,13 +272,9 @@ def _write_package_tree(
         or f"{document.title} scenario, authored with the Scenario Editor.",
         "package_version": "0.1.0",
         "requires_python": _requires_python(),
-        "requirements": [p.requirement() for p in _pins(pin)],
-        "sources": [
-            (p.distribution, _render_source_entry(p))
-            for p in _pins(pin)
-            if _render_source_entry(p)
-        ],
-        "pin_summaries": [(p.distribution, _pin_summary(p)) for p in _pins(pin)],
+        "requirements": [p.requirement() for p in pins],
+        "sources": [(name, body) for name, body in sources if body],
+        "pin_summaries": [(p.distribution, _pin_summary(p)) for p in pins],
         "pin_note": _pin_note(pin),
         "uv_required_version": uv_version,
         "uv_pin_summary": (
@@ -525,6 +515,44 @@ def _strip_build_output(root: Path) -> None:
         shutil.rmtree(path, ignore_errors=True)
 
 
+def _self_check(
+    staging: Path,
+    *,
+    lock: bool,
+    verify: bool,
+    run_tests: bool,
+    warnings: list[str],
+) -> tuple[tuple[bool, bool, bool], str]:
+    """Lock, sync and test the staged package.
+
+    Each step gates the next: there is nothing to sync without a lockfile, and
+    nothing to test without a synced environment.  Returns
+    ``((locked, verified, tested), log)`` and appends to *warnings* whenever a
+    step is skipped or a test run fails -- a package that is not reproducible
+    must not come back looking finished.
+    """
+    if not lock:
+        warnings.append(
+            "Dependency locking was skipped: this package has no uv.lock "
+            "and is not reproducible."
+        )
+        return (False, False, False), ""
+
+    log = _lock(staging)
+    if not verify:
+        return (True, False, False), log
+
+    log += _verify_sync(staging)
+    if not run_tests:
+        return (True, True, False), log
+
+    passed, test_log = _run_tests(staging)
+    log += test_log
+    if not passed:
+        warnings.append("The generated package's own tests failed; see the export log.")
+    return (True, True, passed), log
+
+
 def export_package(
     document: ScenarioDocument,
     destination: str | Path,
@@ -604,36 +632,17 @@ def export_package(
     try:
         files = _write_package_tree(staging, document, names, pin, uv_version, warnings)
 
-        locked = False
-        verified = False
-        tested = False
-
-        if lock:
-            log += _lock(staging)
-            locked = True
-            if verify:
-                log += _verify_sync(staging)
-                verified = True
-                if run_tests:
-                    passed, test_log = _run_tests(staging)
-                    log += test_log
-                    tested = passed
-                    if not passed:
-                        warnings.append(
-                            "The generated package's own tests failed; see the "
-                            "export log."
-                        )
-        else:
-            warnings.append(
-                "Dependency locking was skipped: this package has no uv.lock "
-                "and is not reproducible."
-            )
+        checks, check_log = _self_check(
+            staging, lock=lock, verify=verify, run_tests=run_tests, warnings=warnings
+        )
+        locked, verified, tested = checks
+        log += check_log
 
         manifest = _build_manifest(document, names, pin, uv_version, files, warnings)
         manifest_path = staging / files["manifest"]
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(
-            yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True, width=100),
+            dump_yaml(manifest),
             encoding="utf-8",
         )
 

@@ -91,28 +91,36 @@ class ConstraintNode(_Node):
     :meth:`to_sweep_dict` is a pure re-shaping step -- the editor never gets
     its own constraint engine.
 
+    Children always live in :attr:`constraints`, however many a type takes.
+    The sweeper spells a unary ``not`` child as a singular ``constraint`` key,
+    so that difference lives in :meth:`to_sweep_dict` alone rather than in a
+    second field every walk, edit and validation would have to branch on.
+
     Attributes:
         type: Constraint ``type`` string (``has_adjacent``, ``and``, ``not``, ...).
         params: Leaf parameters (e.g. ``{"value": "left"}``).
-        constraints: Children of an n-ary composite (``and`` / ``or`` /
-            ``previous_of`` / ``following_of``).
-        constraint: Child of the unary ``not`` composite.
+        constraints: Child constraints, bounded by the type's
+            :attr:`~autoware_carla_scenario.authoring.registry.ConstraintSpec.max_children`.
     """
 
     id: str = Field(default_factory=lambda: new_object_id("c"))
     type: str
     params: dict[str, Any] = Field(default_factory=dict)
     constraints: list[ConstraintNode] = Field(default_factory=list)
-    constraint: Optional[ConstraintNode] = None
 
     def to_sweep_dict(self) -> dict[str, Any]:
         """Return this subtree in ``sweep.constraints`` YAML form."""
+        from .registry import get_constraint_spec
+
         out: dict[str, Any] = {"type": self.type}
         out.update(self.params)
-        if self.constraints:
+        if not self.constraints:
+            return out
+        spec = get_constraint_spec(self.type)
+        if spec is not None and spec.kind == "wrapper":
+            out["constraint"] = self.constraints[0].to_sweep_dict()
+        else:
             out["constraints"] = [c.to_sweep_dict() for c in self.constraints]
-        if self.constraint is not None:
-            out["constraint"] = self.constraint.to_sweep_dict()
         return out
 
     def walk(self) -> "list[ConstraintNode]":
@@ -120,8 +128,6 @@ class ConstraintNode(_Node):
         found = [self]
         for child in self.constraints:
             found.extend(child.walk())
-        if self.constraint is not None:
-            found.extend(self.constraint.walk())
         return found
 
 
@@ -296,7 +302,6 @@ class UiNode(_Node):
     """Layout hints for one object on the canvas."""
 
     column_hint: int = 0
-    collapsed: bool = False
 
 
 class UiLayout(_Node):

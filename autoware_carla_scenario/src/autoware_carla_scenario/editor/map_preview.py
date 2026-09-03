@@ -15,6 +15,7 @@ breaking the page.
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -42,7 +43,13 @@ _MAX_POINTS_PER_LANELET = 8
 #: Side of the square SVG user-space the map is fitted into.
 _VIEWBOX = 1000.0
 
-_MAP_CACHE: dict[tuple[str, str], "_LoadedMap"] = {}
+#: Parsed maps kept in memory, newest last.  Parsing is measured in seconds, so
+#: one map has to stay resident to make the preview usable; more than a couple
+#: only pins native map objects for the life of the process, and a session edits
+#: one map at a time.
+_MAP_CACHE_SIZE = 2
+
+_MAP_CACHE: "OrderedDict[tuple[str, str], _LoadedMap]" = OrderedDict()
 
 
 @dataclass
@@ -228,6 +235,7 @@ def _load(document: ScenarioDocument) -> _LoadedMap:
         )
     cached = _MAP_CACHE.get(key)
     if cached is not None:
+        _MAP_CACHE.move_to_end(key)
         return cached
 
     from ..sweeper.constraints import create_routing_graph  # noqa: PLC0415
@@ -249,6 +257,8 @@ def _load(document: ScenarioDocument) -> _LoadedMap:
         lanelet_count=len(list(lanelet_map.laneletLayer)),
     )
     _MAP_CACHE[key] = loaded
+    while len(_MAP_CACHE) > _MAP_CACHE_SIZE:
+        _MAP_CACHE.popitem(last=False)
     return loaded
 
 

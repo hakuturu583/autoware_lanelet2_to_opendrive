@@ -24,6 +24,7 @@ __all__ = [
     "DraftStore",
     "default_draft_dir",
     "dump_document_yaml",
+    "dump_yaml",
     "load_document",
     "save_document",
 ]
@@ -47,11 +48,19 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def dump_yaml(data: Any) -> str:
+    """Return *data* as YAML the way every file this package writes is written.
+
+    Key order is the order the writer chose, because a document, a Hydra config
+    and a manifest all read top-down; wrapping is wide enough that a path or an
+    interpolation stays on one line.
+    """
+    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True, width=100)
+
+
 def dump_document_yaml(document: ScenarioDocument) -> str:
     """Return *document* as a YAML string with stable key order."""
-    return yaml.safe_dump(
-        document.to_yaml_dict(), sort_keys=False, allow_unicode=True, width=100
-    )
+    return dump_yaml(document.to_yaml_dict())
 
 
 def load_document(path: str | Path) -> ScenarioDocument:
@@ -202,9 +211,4 @@ class DraftStore:
 
     def _write(self, draft: Draft) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
-        self.path_for(draft.id).write_text(
-            yaml.safe_dump(
-                draft.to_dict(), sort_keys=False, allow_unicode=True, width=100
-            ),
-            encoding="utf-8",
-        )
+        self.path_for(draft.id).write_text(dump_yaml(draft.to_dict()), encoding="utf-8")

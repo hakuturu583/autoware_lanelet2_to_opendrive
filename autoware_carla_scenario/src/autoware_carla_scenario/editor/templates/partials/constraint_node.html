@@ -1,9 +1,8 @@
 {% import "partials/icons.html" as ic %}
 {# One spawn constraint, rendered recursively.
 
-   The shape mirrors the sweeper's own vocabulary exactly -- composites nest a
-   list, `not` nests a single child -- because this tree is serialised straight
-   into `sweep.constraints`. #}
+   Children always nest in one list; how many a type takes comes from its
+   spec, the same way a predicate composition works. #}
 
 {% macro render(node, draft, entity, selected, document, depth=0) %}
   {%- set spec = get_constraint_spec(node.type) -%}
@@ -27,10 +26,7 @@
         {% for child in node.constraints %}
           {{ render(child, draft, entity, selected, document, depth + 1) }}
         {% endfor %}
-        {% if node.constraint %}
-          {{ render(node.constraint, draft, entity, selected, document, depth + 1) }}
-        {% endif %}
-        {% if spec.kind == 'composite' or not node.constraint %}
+        {% if spec.max_children is none or node.constraints|length < spec.max_children %}
           {{ add_constraint(draft, entity, node.id) }}
         {% endif %}
       </div>

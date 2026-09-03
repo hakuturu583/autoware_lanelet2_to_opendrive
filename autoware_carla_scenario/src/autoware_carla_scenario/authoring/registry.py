@@ -24,6 +24,7 @@ the editor process, which never talks to a simulator.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Literal, Optional
 
@@ -35,9 +36,11 @@ __all__ = [
     "FieldKind",
     "FieldSpec",
     "PredicateVisual",
+    "REFERENCE_PATTERN",
     "SelectOption",
     "COMPARISON_RULES",
     "TRAFFIC_LIGHT_STATES",
+    "TRUTHY_VALUES",
     "action_specs",
     "binding_specs",
     "condition_specs",
@@ -65,6 +68,17 @@ FieldKind = Literal[
     "int_list",
     "int_list_or_ref",
 ]
+
+#: Values a checked HTML checkbox may submit, and the strings a hand-edited
+#: document may spell a ``bool`` field with.  One set, so form parsing and
+#: document coercion cannot drift on what counts as true.
+TRUTHY_VALUES = frozenset({"1", "true", "on", "yes"})
+
+#: An OmegaConf interpolation such as ``${map.no_3d_model_lanelet_ids}``.  A
+#: field whose kind ends in ``_or_ref`` keeps one of these verbatim so the
+#: composed YAML resolves it at run time.
+REFERENCE_PATTERN = re.compile(r"^\$\{[^}]+\}$")
+
 
 #: Condition node shapes.  ``leaf`` takes no children, ``composite`` takes many,
 #: ``wrapper`` takes exactly one.
@@ -173,6 +187,13 @@ class ConstraintSpec:
     fields: tuple[FieldSpec, ...] = ()
     kind: ConstraintKind = "leaf"
     description: str = ""
+
+    @property
+    def max_children(self) -> Optional[int]:
+        """How many child constraints this type takes (``None`` for any)."""
+        if self.kind == "composite":
+            return None
+        return 1 if self.kind == "wrapper" else 0
 
     @property
     def accepts_children(self) -> bool:

@@ -279,16 +279,21 @@ class EditorService:
 
         node = ConstraintNode(type=type_id, params=default_params(spec.fields))
         if parent_id:
-            parent = _find_constraint(entity.spawn.constraints, parent_id)
+            _, parent = find_constraint(document, parent_id)
             if parent is None:
                 raise EditorError(f"No constraint named {parent_id!r}.")
             parent_spec = get_constraint_spec(parent.type)
             if parent_spec is None or not parent_spec.accepts_children:
                 raise EditorError(f"{parent.type!r} does not take child constraints.")
-            if parent_spec.kind == "wrapper":
-                parent.constraint = node
-            else:
-                parent.constraints.append(node)
+            if (
+                parent_spec.max_children is not None
+                and len(parent.constraints) >= parent_spec.max_children
+            ):
+                raise EditorError(
+                    f"{parent_spec.title} takes at most "
+                    f"{parent_spec.max_children} child constraint(s)."
+                )
+            parent.constraints.append(node)
         else:
             entity.spawn.constraints.append(node)
         return node
@@ -297,7 +302,7 @@ class EditorService:
         self, document: ScenarioDocument, node_id: str, form: Mapping[str, Any]
     ) -> None:
         """Apply the constraint inspector form."""
-        node = _find_constraint_in_document(document, node_id)
+        _, node = find_constraint(document, node_id)
         if node is None:
             raise EditorError(f"No constraint named {node_id!r}.")
         spec = get_constraint_spec(node.type)
@@ -589,26 +594,16 @@ def _attach_trigger(
     return ConditionNode(type="all", children=[existing, node])
 
 
-def _find_constraint(
-    nodes: list[ConstraintNode], node_id: str
-) -> ConstraintNode | None:
-    """Find a constraint by id within a forest."""
-    for root in nodes:
-        for candidate in root.walk():
-            if candidate.id == node_id:
-                return candidate
-    return None
-
-
-def _find_constraint_in_document(
+def find_constraint(
     document: ScenarioDocument, node_id: str
-) -> ConstraintNode | None:
-    """Find a constraint by id anywhere in the document."""
+) -> tuple[str | None, ConstraintNode | None]:
+    """Find a constraint by id, with the id of the entity whose spawn holds it."""
     for entity in document.entities:
-        found = _find_constraint(entity.spawn.constraints, node_id)
-        if found is not None:
-            return found
-    return None
+        for root in entity.spawn.constraints:
+            for candidate in root.walk():
+                if candidate.id == node_id:
+                    return entity.id, candidate
+    return None, None
 
 
 def _remove_constraint(nodes: list[ConstraintNode], node_id: str) -> bool:
@@ -617,13 +612,6 @@ def _remove_constraint(nodes: list[ConstraintNode], node_id: str) -> bool:
         if node.id == node_id:
             del nodes[index]
             return True
-        if node.constraint is not None and node.constraint.id == node_id:
-            node.constraint = None
-            return True
         if _remove_constraint(node.constraints, node_id):
-            return True
-        if node.constraint is not None and _remove_constraint(
-            [node.constraint], node_id
-        ):
             return True
     return False

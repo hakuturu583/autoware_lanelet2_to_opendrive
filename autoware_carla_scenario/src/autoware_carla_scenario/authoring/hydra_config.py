@@ -21,9 +21,8 @@ from __future__ import annotations
 
 from typing import Any
 
-import yaml
-
 from .models import Entity, ScenarioDocument
+from .persistence import dump_yaml
 
 __all__ = [
     "PACKAGE_GLOBAL_HEADER",
@@ -153,10 +152,5 @@ def dump_scenario_config(
     document: ScenarioDocument, *, document_path: str | None = None
 ) -> str:
     """Return the Hydra scenario config for *document* as YAML text."""
-    body = yaml.safe_dump(
-        build_scenario_config(document, document_path=document_path),
-        sort_keys=False,
-        allow_unicode=True,
-        width=100,
-    )
+    body = dump_yaml(build_scenario_config(document, document_path=document_path))
     return f"{PACKAGE_GLOBAL_HEADER}\n{body}"
