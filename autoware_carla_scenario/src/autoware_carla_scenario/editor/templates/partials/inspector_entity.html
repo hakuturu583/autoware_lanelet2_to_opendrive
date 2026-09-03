@@ -89,7 +89,7 @@
 
 {% if target.spawn.mode == 'constraint_search' %}
   <h4 class="ed-subheading">{{ ic.icon('map', 12) }} Candidate lanelets</h4>
-  <div class="ed-cons-root" style="margin-bottom:12px">
+  <div class="ed-constraint-root" style="margin-bottom:12px">
     {% for node in target.spawn.constraints %}
       {{ cons.render(node, draft, target, selected, document) }}
     {% else %}
@@ -115,7 +115,7 @@
   <button class="ed-btn-danger" style="width:100%; margin-top:16px"
           hx-post="/draft/{{ draft.id }}/entity/{{ target.id }}/delete"
           hx-target="#editor-body" hx-swap="innerHTML"
-          hx-confirm="Delete this actor, its actions and every predicate that names it?">
+          hx-confirm="Delete this actor, its actions and every condition that names it?">
     {{ ic.icon('trash', 13) }} Delete actor
   </button>
 {% endif %}

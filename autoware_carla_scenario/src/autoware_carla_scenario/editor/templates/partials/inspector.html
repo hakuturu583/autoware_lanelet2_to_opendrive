@@ -67,7 +67,7 @@
 
   {% elif selected_kind == 'condition' %}
     {% set spec = get_condition_spec(target.type) %}
-    <form hx-post="/draft/{{ draft.id }}/predicate/{{ target.id }}"
+    <form hx-post="/draft/{{ draft.id }}/condition/{{ target.id }}"
           hx-trigger="change delay:200ms" hx-target="#editor-body" hx-swap="innerHTML">
       <p class="ed-kicker">{{ spec.category if spec else 'Predicate' }}</p>
       <h3 class="ed-heading">{{ spec.title if spec else target.type }}</h3>
@@ -75,20 +75,20 @@
       {% if spec and spec.fields %}
         {{ f.fields(spec.fields, target.params, document) }}
       {% elif spec %}
-        <p class="ed-help" style="margin-bottom:14px">This predicate has no parameters.</p>
+        <p class="ed-help" style="margin-bottom:14px">This condition has no parameters.</p>
       {% endif %}
     </form>
     {% if spec and spec.accepts_children %}
       <p class="ed-help" style="margin-bottom:14px">
-        {{ spec.min_children }} child predicate(s) required,
+        {{ spec.min_children }} child condition(s) required,
         {{ 'unlimited' if spec.max_children is none else spec.max_children }} allowed.
         Add them on the canvas.
       </p>
     {% endif %}
     <button class="ed-btn-danger" style="width:100%"
-            hx-post="/draft/{{ draft.id }}/predicate/{{ target.id }}/delete"
+            hx-post="/draft/{{ draft.id }}/condition/{{ target.id }}/delete"
             hx-target="#editor-body" hx-swap="innerHTML">
-      {{ ic.icon('trash', 13) }} Delete predicate
+      {{ ic.icon('trash', 13) }} Delete condition
     </button>
 
   {% elif selected_kind == 'constraint' %}

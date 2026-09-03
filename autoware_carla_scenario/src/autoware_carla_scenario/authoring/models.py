@@ -219,7 +219,7 @@ class Entity(_Node):
 
 
 class ConditionNode(_Node):
-    """One node of a condition tree (a *predicate* or a composition of them).
+    """One node of a condition tree: a leaf check, or a composition of them.
 
     A single recursive node type covers leaves (``entity_distance``, ``ttc``,
     ``speed``, ...) and compositions (``all`` / ``any`` / ``not`` / ``sticky`` /
@@ -276,7 +276,7 @@ class Assertions(_Node):
 
 
 class ActionNode(_Node):
-    """Something an actor does, gated by an optional trigger predicate.
+    """Something an actor does, gated by an optional trigger condition.
 
     There is no separate "events" concept: a trigger is simply the condition
     tree attached to the action it fires, which is what the swimlane draws

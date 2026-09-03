@@ -12,7 +12,7 @@
    * DAG connectors
    *
    * Each trigger block is linked to its action card. The line is drawn into
-   * one SVG overlay positioned over the canvas, so adding a predicate never
+   * one SVG overlay positioned over the canvas, so adding a condition never
    * has to reason about layout — it just re-renders and we redraw.
    * ------------------------------------------------------------------- */
 

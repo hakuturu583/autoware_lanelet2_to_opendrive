@@ -175,7 +175,7 @@ class EditorService:
         return entity
 
     def delete_entity(self, document: ScenarioDocument, entity_id: str) -> None:
-        """Remove an entity, its actions, and every predicate that referenced it.
+        """Remove an entity, its actions, and every condition that referenced it.
 
         Leaving a dangling reference behind would turn a delete into a
         validation error the user did not cause, so the references go too.
@@ -417,11 +417,11 @@ class EditorService:
     def add_condition(
         self, document: ScenarioDocument, slot: str, type_id: str
     ) -> ConditionNode:
-        """Add a predicate into *slot*.
+        """Add a condition into *slot*.
 
         Slots are ``trigger:<action_id>`` (the action's trigger),
         ``node:<node_id>`` (a child of a composition), ``pass`` or ``fail``.
-        Attaching a second predicate to an action whose trigger is a single leaf
+        Attaching a second condition to an action whose trigger is a single leaf
         wraps both in an ``ALL`` -- the reading the swimlane already implies.
         """
         spec = get_condition_spec(type_id)
@@ -466,7 +466,7 @@ class EditorService:
     def update_condition(
         self, document: ScenarioDocument, node_id: str, form: Mapping[str, Any]
     ) -> None:
-        """Apply the predicate inspector form."""
+        """Apply the condition inspector form."""
         node = document.condition(node_id)
         if node is None:
             raise EditorError(f"No condition named {node_id!r}.")
@@ -476,7 +476,7 @@ class EditorService:
         node.params.update(_parse(spec.fields, form))
 
     def delete_condition(self, document: ScenarioDocument, node_id: str) -> None:
-        """Remove a predicate subtree from wherever it sits."""
+        """Remove a condition subtree from wherever it sits."""
         for action in document.actions:
             trigger = action.trigger
             if trigger is None:
@@ -567,7 +567,7 @@ def _references_entity(node: ConditionNode, entity_id: str) -> bool:
     """Whether any node in this subtree names *entity_id*.
 
     Entity-typed parameters are discovered from the spec, so this keeps working
-    when a new predicate introduces a differently named entity field.
+    when a new condition introduces a differently named entity field.
     """
     for candidate in node.walk():
         spec = get_condition_spec(candidate.type)

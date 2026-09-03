@@ -2,18 +2,18 @@
 {# One spawn constraint, rendered recursively.
 
    Children always nest in one list; how many a type takes comes from its
-   spec, the same way a predicate composition works. #}
+   spec, the same way a condition composition works. #}
 
 {% macro render(node, draft, entity, selected, document, depth=0) %}
   {%- set spec = get_constraint_spec(node.type) -%}
-  <div class="ed-cons {% if selected == node.id %}is-selected{% endif %}">
-    <div class="ed-cons-head" tabindex="0" role="button"
+  <div class="ed-constraint {% if selected == node.id %}is-selected{% endif %}">
+    <div class="ed-constraint-head" tabindex="0" role="button"
          hx-get="/draft/{{ draft.id }}/inspector/{{ node.id }}"
          hx-target="#inspector" hx-swap="innerHTML">
-      <span class="ed-cons-title">
+      <span class="ed-constraint-title">
         {% if spec %}{{ spec.title }}{% else %}<span style="color:var(--fail)">{{ node.type }}</span>{% endif %}
       </span>
-      <span class="ed-cons-params">{{ constraint_summary(node, spec) }}</span>
+      <span class="ed-constraint-params">{{ constraint_summary(node, spec) }}</span>
       <form hx-post="/draft/{{ draft.id }}/constraint/{{ node.id }}/delete"
             hx-target="#editor-body" hx-swap="innerHTML" style="margin-left:auto">
         <input type="hidden" name="selected" value="{{ entity.id }}">
@@ -22,7 +22,7 @@
     </div>
 
     {% if spec and spec.accepts_children %}
-      <div class="ed-cons-children">
+      <div class="ed-constraint-children">
         {% for child in node.constraints %}
           {{ render(child, draft, entity, selected, document, depth + 1) }}
         {% endfor %}

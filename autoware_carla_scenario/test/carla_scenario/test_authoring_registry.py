@@ -1,7 +1,7 @@
 """The metadata registry is the contract between the runtime and the GUI.
 
 These tests pin the parts a template or a builder relies on: that every
-registered primitive has a builder, that a predicate's visual actually names
+registered primitive has a builder, that a condition's visual actually names
 fields the primitive has, and that the option lists spelled out in the registry
 still match the runtime enums they mirror.
 """
@@ -41,7 +41,7 @@ class TestSpecCoverage:
             assert all(s.title for s in specs)
 
 
-class TestPredicateVisuals:
+class TestConditionVisuals:
     """A visual that names a field the primitive lacks renders as blank."""
 
     @pytest.mark.parametrize(

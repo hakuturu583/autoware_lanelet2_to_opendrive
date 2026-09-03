@@ -23,7 +23,7 @@ ScenarioDocument -> ScenarioCompiler -> BaseAction / BaseCondition -> BaseScenar
 ```
 
 There is no editor-only runtime. Every action a document names is built by
-`autoware_carla_scenario.actions`, every predicate by
+`autoware_carla_scenario.actions`, every condition by
 `autoware_carla_scenario.conditions`, and every spawn constraint is evaluated by
 the same `sweeper.constraints` engine a `--multirun` sweep uses.
 
@@ -59,7 +59,7 @@ Two rules make it readable:
   the action it fires, so cause and effect are next to each other instead of
   being correlated across the screen.
 
-Every predicate reads as `subject -> target | metric | predicate`, e.g.
+Every condition reads as `subject -> target | metric | rule value`, e.g.
 `NPC1 -> Ego | Distance | < 20 m` or `Ego -> Lanelet 183 | Position | inside`.
 Compose them with `ALL`, `ANY`, `NOT`, `Sticky` and `Persistent`, which map onto
 `AndCondition`, `OrCondition`, `NotCondition`, `StickyCondition` and

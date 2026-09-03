@@ -1,4 +1,4 @@
-"""Relative predicates: distance and time-to-collision between two entities.
+"""Relative conditions: distance and time-to-collision between two entities.
 
 Both read positions and velocities off CARLA actors, so the world is faked: the
 arithmetic and the guard conditions are what matter, and they are what a
@@ -77,7 +77,7 @@ class TestEntityDistanceCondition:
         )
         assert condition.check(_world(_actor("npc1", (0, 0, 0))), 1.0) is None
 
-    def test_details_describe_the_predicate(self) -> None:
+    def test_details_describe_the_condition(self) -> None:
         condition = EntityDistanceCondition(
             source="npc1",
             target="Ego",
@@ -117,7 +117,7 @@ class TestTimeToCollisionCondition:
         assert "2.00 s" in result.message
 
     def test_a_receding_pair_has_no_time_to_collision(self) -> None:
-        """A car driving away must never trigger a TTC predicate."""
+        """A car driving away must never trigger a TTC condition."""
         condition = TimeToCollisionCondition(
             source="npc1", target="Ego", value=1000.0, label="ttc"
         )
@@ -166,7 +166,7 @@ class TestTimeToCollisionCondition:
         )
         assert condition.check(_world(_actor("Ego", (0, 0, 0))), 1.0) is None
 
-    def test_details_describe_the_predicate(self) -> None:
+    def test_details_describe_the_condition(self) -> None:
         condition = TimeToCollisionCondition(
             source="npc1", target="Ego", value=4.0, label="ttc"
         )

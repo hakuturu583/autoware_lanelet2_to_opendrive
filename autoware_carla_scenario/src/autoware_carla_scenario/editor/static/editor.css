@@ -33,7 +33,7 @@
   --ink-faint: #a8afbd;
   --ink-inverse: #f4f5f7;
 
-  /* One accent, used for selection, focus and the operator in a predicate. */
+  /* One accent, used for selection, focus and the operator in a condition. */
   --accent: #5a5ad6;
   --accent-hover: #4a4ac6;
   --accent-wash: #eeeefd;
@@ -626,7 +626,7 @@ textarea.ed-input { resize: vertical; min-height: 58px; line-height: 1.5; }
 .ed-move-btn svg { width: 11px; height: 11px; }
 .ed-move-btn:hover { background: var(--accent-wash); border-color: var(--accent-line); color: var(--accent); }
 
-/* --------------------------------------------------------------- predicates */
+/* --------------------------------------------------------------- conditions */
 
 .ed-trigger-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
 .ed-trigger { display: flex; flex-direction: column; gap: 6px; align-items: stretch; width: 100%; }
@@ -640,7 +640,7 @@ textarea.ed-input { resize: vertical; min-height: 58px; line-height: 1.5; }
   background: rgba(255, 255, 255, 0.7);
 }
 
-.ed-pred {
+.ed-cond {
   position: relative;
   display: block;
   width: 100%;
@@ -654,14 +654,14 @@ textarea.ed-input { resize: vertical; min-height: 58px; line-height: 1.5; }
   box-shadow: var(--shadow-sm);
   transition: box-shadow 0.15s, border-color 0.13s;
 }
-.ed-pred:hover { box-shadow: var(--shadow); border-color: var(--line-strong); }
-.ed-pred.is-selected {
+.ed-cond:hover { box-shadow: var(--shadow); border-color: var(--line-strong); }
+.ed-cond.is-selected {
   border-color: var(--accent);
   border-left-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-wash);
 }
 
-.pred-subject {
+.cond-subject {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -670,10 +670,10 @@ textarea.ed-input { resize: vertical; min-height: 58px; line-height: 1.5; }
   color: var(--ink);
   letter-spacing: -0.005em;
 }
-.pred-arrow { color: var(--ink-faint); }
-.pred-world { color: var(--ink-faint); font-weight: 500; }
-.pred-metric { font-size: 10.5px; color: var(--ink-muted); margin-top: 1px; }
-.pred-value {
+.cond-arrow { color: var(--ink-faint); }
+.cond-world { color: var(--ink-faint); font-weight: 500; }
+.cond-metric { font-size: 10.5px; color: var(--ink-muted); margin-top: 1px; }
+.cond-value {
   font-size: 13px;
   font-weight: 650;
   color: var(--ink);
@@ -681,18 +681,18 @@ textarea.ed-input { resize: vertical; min-height: 58px; line-height: 1.5; }
   letter-spacing: -0.01em;
   margin-top: 1px;
 }
-.pred-op { color: var(--accent); margin-right: 2px; }
-.pred-unit { color: var(--ink-muted); font-weight: 500; font-size: 11.5px; }
+.cond-op { color: var(--accent); margin-right: 2px; }
+.cond-unit { color: var(--ink-muted); font-weight: 500; font-size: 11.5px; }
 
-.ed-pred-group {
+.ed-cond-group {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   background: var(--surface-sunken);
   padding: 7px;
   box-shadow: var(--shadow-sm);
 }
-.ed-pred-group.is-selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
-.ed-pred-group-head {
+.ed-cond-group.is-selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+.ed-cond-group-head {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -715,7 +715,7 @@ textarea.ed-input { resize: vertical; min-height: 58px; line-height: 1.5; }
 .ed-op-sticky { background: #0891b2; }
 .ed-op-persistent { background: #7c3aed; }
 .ed-op-note { font-size: 11px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
-.ed-pred-children {
+.ed-cond-children {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -741,13 +741,13 @@ textarea.ed-input { resize: vertical; min-height: 58px; line-height: 1.5; }
   transition: opacity 0.13s, background-color 0.13s, color 0.13s;
 }
 .ed-del svg { width: 10px; height: 10px; }
-.ed-pred:hover .ed-del,
-.ed-pred-group:hover .ed-del,
-.ed-cons:hover .ed-del,
+.ed-cond:hover .ed-del,
+.ed-cond-group:hover .ed-del,
+.ed-constraint:hover .ed-del,
 .ed-del:focus-visible { opacity: 1; }
 .ed-del:hover { background: var(--fail-wash); color: var(--fail); }
-.ed-pred-group-head .ed-del,
-.ed-cons-head .ed-del { position: static; margin-left: auto; }
+.ed-cond-group-head .ed-del,
+.ed-constraint-head .ed-del { position: static; margin-left: auto; }
 
 /* An "add" control is a folded `<details>`: the type picker only appears when
  * it is wanted, so a lane with four compositions is not four open selects. */
@@ -799,8 +799,8 @@ textarea.ed-input { resize: vertical; min-height: 58px; line-height: 1.5; }
 .ed-verdict .ed-lane-head { background: transparent; }
 .ed-verdict-pass { --lane-hue: var(--pass); }
 .ed-verdict-fail { --lane-hue: var(--fail); }
-.ed-verdict-pass .ed-pred { --pred-hue: var(--pass); }
-.ed-verdict-fail .ed-pred { --pred-hue: var(--fail); }
+.ed-verdict-pass .ed-cond { --pred-hue: var(--pass); }
+.ed-verdict-fail .ed-cond { --pred-hue: var(--fail); }
 .ed-verdict-label { display: flex; align-items: center; gap: 7px; }
 .ed-verdict-label svg { width: 15px; height: 15px; color: var(--lane-hue); }
 .ed-verdict-label span { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; color: var(--ink); }
@@ -808,10 +808,10 @@ textarea.ed-input { resize: vertical; min-height: 58px; line-height: 1.5; }
 
 /* -------------------------------------------------------------- constraints */
 
-.ed-cons-root { display: flex; flex-direction: column; gap: 5px; }
-.ed-cons { position: relative; border-left: 2px solid var(--line); padding-left: 9px; }
-.ed-cons.is-selected { border-left-color: var(--accent); }
-.ed-cons-head {
+.ed-constraint-root { display: flex; flex-direction: column; gap: 5px; }
+.ed-constraint { position: relative; border-left: 2px solid var(--line); padding-left: 9px; }
+.ed-constraint.is-selected { border-left-color: var(--accent); }
+.ed-constraint-head {
   display: flex;
   align-items: baseline;
   gap: 7px;
@@ -819,10 +819,10 @@ textarea.ed-input { resize: vertical; min-height: 58px; line-height: 1.5; }
   cursor: pointer;
   border-radius: 4px;
 }
-.ed-cons-head:hover { background: var(--surface-sunken); }
-.ed-cons-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
-.ed-cons-params { font-size: 11px; color: var(--ink-muted); font-family: var(--mono); }
-.ed-cons-children { display: flex; flex-direction: column; gap: 5px; margin-left: 4px; margin-top: 4px; }
+.ed-constraint-head:hover { background: var(--surface-sunken); }
+.ed-constraint-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.ed-constraint-params { font-size: 11px; color: var(--ink-muted); font-family: var(--mono); }
+.ed-constraint-children { display: flex; flex-direction: column; gap: 5px; margin-left: 4px; margin-top: 4px; }
 
 .ed-derived {
   border: 1px solid var(--accent-line);

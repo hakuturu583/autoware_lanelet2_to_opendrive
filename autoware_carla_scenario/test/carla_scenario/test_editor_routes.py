@@ -54,7 +54,7 @@ def _action(store: DraftStore, draft_id: str, action_id: str) -> ActionNode:
 
 
 def _condition(store: DraftStore, draft_id: str, node_id: str) -> ConditionNode:
-    """Return a stored predicate, failing the test when it is gone."""
+    """Return a stored condition, failing the test when it is gone."""
     return _present(_document(store, draft_id).condition(node_id), node_id)
 
 
@@ -95,7 +95,7 @@ class TestPages:
         for expected in ("Ego", "NPC1", "Cut in", "PASS", "FAIL"):
             assert expected in body, expected
 
-    def test_a_predicate_reads_as_subject_target_metric_value(
+    def test_a_condition_reads_as_subject_target_metric_value(
         self, client: TestClient, draft_id: str
     ) -> None:
         """The reading the whole canvas is built around."""
@@ -103,13 +103,13 @@ class TestPages:
         # Subject and target, the metric, and the value with its unit -- asserted
         # as the pieces the reading is made of rather than as one literal string,
         # so restyling the chip does not look like a regression.
-        assert 'class="pred-subject"' in body
+        assert 'class="cond-subject"' in body
         assert "&#8594;" in body or "→" in body
         assert ">Distance<" in body
         assert ">TTC<" in body
         for value, unit in (("20.0", "m"), ("4.0", "s")):
             assert value in body
-            assert '<span class="pred-unit">%s</span>' % unit in body
+            assert '<span class="cond-unit">%s</span>' % unit in body
 
     def test_triggers_are_attached_to_actions_not_a_separate_lane(
         self, client: TestClient, draft_id: str
@@ -224,7 +224,7 @@ class TestEntityEditing:
         after = _entity(store, draft_id, "npc1")
         assert after.initial_speed_kmh == before.initial_speed_kmh
 
-    def test_deleting_an_entity_removes_predicates_that_named_it(
+    def test_deleting_an_entity_removes_conditions_that_named_it(
         self, client: TestClient, store: DraftStore, draft_id: str
     ) -> None:
         """A delete must not leave behind a validation error the user did not cause."""
@@ -295,7 +295,7 @@ class TestActionEditing:
 
 
 class TestPredicateEditing:
-    def test_a_second_trigger_predicate_wraps_both_in_all(
+    def test_a_second_trigger_condition_wraps_both_in_all(
         self, client: TestClient, store: DraftStore, draft_id: str
     ) -> None:
         document = _document(store, draft_id)
@@ -304,7 +304,7 @@ class TestPredicateEditing:
         assert action.trigger.type == "all"
 
         client.post(
-            f"/draft/{draft_id}/predicate",
+            f"/draft/{draft_id}/condition",
             data={"slot": f"trigger:{action.id}", "type_id": "speed"},
         )
         trigger = _present(_action(store, draft_id, action.id).trigger, "trigger")
@@ -318,41 +318,41 @@ class TestPredicateEditing:
         self, client: TestClient, store: DraftStore, draft_id: str
     ) -> None:
         client.post(
-            f"/draft/{draft_id}/predicate", data={"slot": "fail", "type_id": "not"}
+            f"/draft/{draft_id}/condition", data={"slot": "fail", "type_id": "not"}
         )
         wrapper = _document(store, draft_id).assertions.fail_conditions[-1]
         client.post(
-            f"/draft/{draft_id}/predicate",
+            f"/draft/{draft_id}/condition",
             data={"slot": f"node:{wrapper.id}", "type_id": "collision"},
         )
         response = client.post(
-            f"/draft/{draft_id}/predicate",
+            f"/draft/{draft_id}/condition",
             data={"slot": f"node:{wrapper.id}", "type_id": "collision"},
         )
         assert "already has its" in response.text
         assert len(_condition(store, draft_id, wrapper.id).children) == 1
 
-    def test_pass_and_fail_predicates_can_be_added_and_edited(
+    def test_pass_and_fail_conditions_can_be_added_and_edited(
         self, client: TestClient, store: DraftStore, draft_id: str
     ) -> None:
         client.post(
-            f"/draft/{draft_id}/predicate",
+            f"/draft/{draft_id}/condition",
             data={"slot": "pass", "type_id": "elapsed_time"},
         )
         node = _document(store, draft_id).assertions.pass_conditions[-1]
         client.post(
-            f"/draft/{draft_id}/predicate/{node.id}",
+            f"/draft/{draft_id}/condition/{node.id}",
             data={"rule": "greater_than", "duration_seconds": "12"},
         )
         updated = _condition(store, draft_id, node.id)
         assert updated.params == {"rule": "greater_than", "duration_seconds": 12.0}
 
-    def test_deleting_the_only_trigger_predicate_clears_the_trigger(
+    def test_deleting_the_only_trigger_condition_clears_the_trigger(
         self, client: TestClient, store: DraftStore, draft_id: str
     ) -> None:
         action = _document(store, draft_id).actions[0]
         trigger = _present(action.trigger, "trigger")
-        client.post(f"/draft/{draft_id}/predicate/{trigger.id}/delete")
+        client.post(f"/draft/{draft_id}/condition/{trigger.id}/delete")
         assert _action(store, draft_id, action.id).trigger is None
 
 

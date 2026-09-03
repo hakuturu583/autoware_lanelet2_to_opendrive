@@ -67,9 +67,9 @@
 {% endmacro %}
 
 
-{# A predicate rendered as `subject -> target | metric | <rule> value unit`,
+{# A condition rendered as `subject -> target | metric | <rule> value unit`,
    which is the reading the swimlane is built around. #}
-{% macro predicate_summary(node, document) %}
+{% macro condition_summary(node, document) %}
   {%- set spec = get_condition_spec(node.type) -%}
   {% if spec %}
     {%- set visual = spec.visual -%}
@@ -77,20 +77,20 @@
     {%- set target = node.params.get(visual.target) if visual.target else none -%}
     {%- set value = node.params.get(visual.value) if visual.value else none -%}
     {%- set rule = node.params.get(visual.rule) if visual.rule else none -%}
-    <div class="pred-subject">
+    <div class="cond-subject">
       {% if subject %}<span>{{ entity_label(subject, document) }}</span>{% endif %}
-      {% if subject and target is not none %}<span class="pred-arrow">&#8594;</span>{% endif %}
+      {% if subject and target is not none %}<span class="cond-arrow">&#8594;</span>{% endif %}
       {% if target is not none %}<span>{{ entity_label(target, document) }}</span>{% endif %}
-      {% if not subject and target is none %}<span class="pred-world">world</span>{% endif %}
+      {% if not subject and target is none %}<span class="cond-world">world</span>{% endif %}
     </div>
-    <div class="pred-metric">{{ visual.metric }}</div>
-    <div class="pred-value">
-      {% if rule %}<span class="pred-op">{{ rule_symbol(rule) }}</span>{% endif %}
-      {% if value is not none %}{{ value }}{% if visual.unit %} <span class="pred-unit">{{ visual.unit }}</span>{% endif %}
+    <div class="cond-metric">{{ visual.metric }}</div>
+    <div class="cond-value">
+      {% if rule %}<span class="cond-op">{{ rule_symbol(rule) }}</span>{% endif %}
+      {% if value is not none %}{{ value }}{% if visual.unit %} <span class="cond-unit">{{ visual.unit }}</span>{% endif %}
       {% elif visual.value_label %}{{ visual.value_label }}{% endif %}
     </div>
   {% else %}
-    <div class="pred-metric" style="color:var(--fail)">Unknown predicate “{{ node.type }}”</div>
+    <div class="cond-metric" style="color:var(--fail)">Unknown condition “{{ node.type }}”</div>
   {% endif %}
 {% endmacro %}
 

@@ -121,7 +121,7 @@ class TestValidation:
             "Only one ego" in i.message for i in validate_document(document).errors
         )
 
-    def test_unknown_predicate_type_is_an_error(self) -> None:
+    def test_unknown_condition_type_is_an_error(self) -> None:
         document = new_document()
         document.assertions.pass_conditions = [ConditionNode(type="nope")]
         assert any(
@@ -129,7 +129,7 @@ class TestValidation:
             for i in validate_document(document).errors
         )
 
-    def test_predicate_referencing_a_missing_entity_is_an_error(self) -> None:
+    def test_condition_referencing_a_missing_entity_is_an_error(self) -> None:
         document = new_document()
         action = document.actions[0]
         assert action.trigger is not None

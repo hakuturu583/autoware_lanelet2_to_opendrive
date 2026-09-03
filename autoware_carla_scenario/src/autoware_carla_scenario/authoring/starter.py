@@ -1,7 +1,7 @@
 """Starter documents -- what "New scenario" gives you.
 
 A blank canvas is a bad first experience for a declarative editor: nothing on
-screen explains what a swimlane, a trigger predicate or a spawn constraint is.
+screen explains what a swimlane, a trigger condition or a spawn constraint is.
 :func:`new_document` therefore returns a small but *complete and valid* cut-in
 scenario -- an ego, one NPC, a triggered lane change, and PASS/FAIL assertions --
 that a user can run, then edit into whatever they actually wanted.

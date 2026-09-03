@@ -10,7 +10,7 @@ with no template change at all.
 Each spec carries three things:
 
 * how to **present** it -- title, category and, for conditions, a
-  :class:`PredicateVisual` saying which parameters read as *subject*, *target*,
+  :class:`ConditionVisual` saying which parameters read as *subject*, *target*,
   *metric* and *value* so the swimlane can render ``NPC1 -> Ego | Distance | < 20 m``;
 * how to **edit** it -- an ordered tuple of :class:`FieldSpec` the inspector
   turns into form controls;
@@ -35,7 +35,7 @@ __all__ = [
     "ConstraintSpec",
     "FieldKind",
     "FieldSpec",
-    "PredicateVisual",
+    "ConditionVisual",
     "REFERENCE_PATTERN",
     "SelectOption",
     "COMPARISON_RULES",
@@ -122,12 +122,12 @@ class FieldSpec:
 
 
 @dataclass(frozen=True)
-class PredicateVisual:
-    """How a condition reads as ``subject -> target | metric | predicate``.
+class ConditionVisual:
+    """How a condition reads as ``subject -> target | metric | rule value``.
 
     ``subject`` / ``target`` / ``value`` name *fields*; the canvas substitutes
     the node's current parameter values.  ``value_label`` supplies constant
-    text for predicates whose right-hand side is not a number (``inside``,
+    text for conditions whose right-hand side is not a number (``inside``,
     ``occurred``).  ``rule`` names the field holding the comparison operator.
     """
 
@@ -164,7 +164,7 @@ class ConditionSpec:
     title: str
     category: str
     builder: str
-    visual: PredicateVisual
+    visual: ConditionVisual
     fields: tuple[FieldSpec, ...] = ()
     kind: ConditionKind = "leaf"
     min_children: int = 0
@@ -442,10 +442,10 @@ register_condition_spec(
         category="Composition",
         builder="build_and_condition",
         kind="composite",
-        visual=PredicateVisual(metric="ALL"),
+        visual=ConditionVisual(metric="ALL"),
         min_children=2,
         max_children=None,
-        description="Every child predicate must hold (AndCondition).",
+        description="Every child condition must hold (AndCondition).",
     )
 )
 
@@ -456,10 +456,10 @@ register_condition_spec(
         category="Composition",
         builder="build_or_condition",
         kind="composite",
-        visual=PredicateVisual(metric="ANY"),
+        visual=ConditionVisual(metric="ANY"),
         min_children=2,
         max_children=None,
-        description="At least one child predicate must hold (OrCondition).",
+        description="At least one child condition must hold (OrCondition).",
     )
 )
 
@@ -470,10 +470,10 @@ register_condition_spec(
         category="Composition",
         builder="build_not_condition",
         kind="wrapper",
-        visual=PredicateVisual(metric="NOT"),
+        visual=ConditionVisual(metric="NOT"),
         min_children=1,
         max_children=1,
-        description="Invert the child predicate (NotCondition).",
+        description="Invert the child condition (NotCondition).",
     )
 )
 
@@ -484,7 +484,7 @@ register_condition_spec(
         category="Composition",
         builder="build_sticky_condition",
         kind="wrapper",
-        visual=PredicateVisual(metric="Sticky"),
+        visual=ConditionVisual(metric="Sticky"),
         min_children=1,
         max_children=1,
         description="Latch the child once it has held (StickyCondition).",
@@ -498,7 +498,7 @@ register_condition_spec(
         category="Composition",
         builder="build_persistent_condition",
         kind="wrapper",
-        visual=PredicateVisual(metric="Held for", value="duration", unit="s"),
+        visual=ConditionVisual(metric="Held for", value="duration", unit="s"),
         fields=(
             FieldSpec(
                 name="duration",
@@ -516,7 +516,7 @@ register_condition_spec(
 
 
 # ---------------------------------------------------------------------------
-# Built-in conditions -- relational predicates
+# Built-in conditions -- relational
 # ---------------------------------------------------------------------------
 
 register_condition_spec(
@@ -525,7 +525,7 @@ register_condition_spec(
         title="Distance",
         category="Relative",
         builder="build_entity_distance_condition",
-        visual=PredicateVisual(
+        visual=ConditionVisual(
             metric="Distance",
             subject="source",
             target="target",
@@ -551,7 +551,7 @@ register_condition_spec(
         title="TTC",
         category="Relative",
         builder="build_ttc_condition",
-        visual=PredicateVisual(
+        visual=ConditionVisual(
             metric="TTC",
             subject="source",
             target="target",
@@ -573,7 +573,7 @@ register_condition_spec(
 
 
 # ---------------------------------------------------------------------------
-# Built-in conditions -- single-entity predicates
+# Built-in conditions -- single entity
 # ---------------------------------------------------------------------------
 
 register_condition_spec(
@@ -582,7 +582,7 @@ register_condition_spec(
         title="Speed",
         category="Entity",
         builder="build_speed_condition",
-        visual=PredicateVisual(
+        visual=ConditionVisual(
             metric="Speed",
             subject="entity",
             rule="rule",
@@ -624,7 +624,7 @@ register_condition_spec(
         title="Standstill",
         category="Entity",
         builder="build_standstill_condition",
-        visual=PredicateVisual(
+        visual=ConditionVisual(
             metric="Standstill", subject="entity", value="duration", unit="s"
         ),
         fields=(
@@ -651,7 +651,7 @@ register_condition_spec(
         title="Position",
         category="Entity",
         builder="build_entity_lane_position_condition",
-        visual=PredicateVisual(
+        visual=ConditionVisual(
             metric="Position",
             subject="entity",
             target="lanelet_id",
@@ -685,7 +685,7 @@ register_condition_spec(
         title="Exists",
         category="Entity",
         builder="build_entity_existence_condition",
-        visual=PredicateVisual(
+        visual=ConditionVisual(
             metric="Existence", subject="entity", value_label="missing"
         ),
         fields=(_entity_field("entity", "Subject"),),
@@ -699,7 +699,7 @@ register_condition_spec(
         title="Road ends ahead",
         category="Entity",
         builder="build_waypoint_condition",
-        visual=PredicateVisual(
+        visual=ConditionVisual(
             metric="Waypoints ahead", subject="entity", value_label="none"
         ),
         fields=(
@@ -718,7 +718,7 @@ register_condition_spec(
 
 
 # ---------------------------------------------------------------------------
-# Built-in conditions -- world predicates
+# Built-in conditions -- world
 # ---------------------------------------------------------------------------
 
 register_condition_spec(
@@ -727,7 +727,7 @@ register_condition_spec(
         title="Elapsed time",
         category="World",
         builder="build_elapsed_time_condition",
-        visual=PredicateVisual(
+        visual=ConditionVisual(
             metric="Elapsed time", rule="rule", value="duration_seconds", unit="s"
         ),
         fields=(
@@ -756,7 +756,7 @@ register_condition_spec(
         title="Timeout",
         category="World",
         builder="build_timeout_condition",
-        visual=PredicateVisual(metric="Timeout", value="timeout_seconds", unit="s"),
+        visual=ConditionVisual(metric="Timeout", value="timeout_seconds", unit="s"),
         fields=(
             FieldSpec(
                 name="timeout_seconds",
@@ -776,7 +776,7 @@ register_condition_spec(
         title="Collision",
         category="World",
         builder="build_collision_condition",
-        visual=PredicateVisual(metric="Collision", value_label="occurred"),
+        visual=ConditionVisual(metric="Collision", value_label="occurred"),
         fields=(
             FieldSpec(
                 name="min_impulse",
@@ -797,7 +797,7 @@ register_condition_spec(
         title="Traffic signal state",
         category="World",
         builder="build_traffic_signal_condition",
-        visual=PredicateVisual(
+        visual=ConditionVisual(
             metric="Signal", target="lanelet2_regulatory_element_id", value="state"
         ),
         fields=(
@@ -825,7 +825,7 @@ register_condition_spec(
         title="Always",
         category="World",
         builder="build_always_true_condition",
-        visual=PredicateVisual(metric="Always", value_label="true"),
+        visual=ConditionVisual(metric="Always", value_label="true"),
         description="Fires unconditionally -- the default action trigger.",
     )
 )

@@ -288,7 +288,7 @@ async def update_entity(
 
 @router.post("/draft/{draft_id}/entity/{entity_id}/delete", response_class=HTMLResponse)
 def delete_entity(request: Request, draft_id: str, entity_id: str) -> HTMLResponse:
-    """Delete an entity together with its actions and predicates."""
+    """Delete an entity together with its actions and conditions."""
     service = _service(request)
     return _apply(
         request,
@@ -427,9 +427,9 @@ async def reorder_actors(request: Request, draft_id: str) -> HTMLResponse:
 # ---------------------------------------------------------------------------
 
 
-@router.post("/draft/{draft_id}/predicate", response_class=HTMLResponse)
-async def add_predicate(request: Request, draft_id: str) -> HTMLResponse:
-    """Add a predicate to an action trigger, a composition, or an assertion."""
+@router.post("/draft/{draft_id}/condition", response_class=HTMLResponse)
+async def add_condition(request: Request, draft_id: str) -> HTMLResponse:
+    """Add a condition to an action trigger, a composition, or an assertion."""
     form = dict(await request.form())
     slot = str(form.get("slot", ""))
     type_id = str(form.get("type_id", ""))
@@ -442,11 +442,11 @@ async def add_predicate(request: Request, draft_id: str) -> HTMLResponse:
     )
 
 
-@router.post("/draft/{draft_id}/predicate/{node_id}", response_class=HTMLResponse)
-async def update_predicate(
+@router.post("/draft/{draft_id}/condition/{node_id}", response_class=HTMLResponse)
+async def update_condition(
     request: Request, draft_id: str, node_id: str
 ) -> HTMLResponse:
-    """Apply the predicate inspector form."""
+    """Apply the condition inspector form."""
     form = dict(await request.form())
     service = _service(request)
     return _apply(
@@ -458,10 +458,10 @@ async def update_predicate(
 
 
 @router.post(
-    "/draft/{draft_id}/predicate/{node_id}/delete", response_class=HTMLResponse
+    "/draft/{draft_id}/condition/{node_id}/delete", response_class=HTMLResponse
 )
-def delete_predicate(request: Request, draft_id: str, node_id: str) -> HTMLResponse:
-    """Delete a predicate subtree."""
+def delete_condition(request: Request, draft_id: str, node_id: str) -> HTMLResponse:
+    """Delete a condition subtree."""
     service = _service(request)
     return _apply(
         request,
