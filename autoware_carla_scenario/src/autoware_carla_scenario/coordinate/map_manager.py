@@ -17,6 +17,7 @@ where ``mgrs_offset = MGRSProjector.forward(lat_0, lon_0)``.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import tempfile
@@ -139,7 +140,12 @@ class MapManager:
         #      lanelet<->road mapping, OpenDRIVE conversions) are unavailable and
         #      raise if used.
         # A CARLA-sourced OpenDRIVE is written to a temp file because pyxodr reads
-        # a path; it is removed once parsing is done.
+        # a path; it is removed once parsing is done.  The dump path is derived
+        # from the OpenDRIVE *content* (not a random ``mkstemp`` name) so the
+        # lanelet<->road mapping cache -- a sidecar written next to the .xodr as
+        # ``<stem>.mapping.json`` -- keeps a stable name and is reused across runs
+        # for the same CARLA level, instead of rebuilt on every start and left
+        # behind under an ever-changing random name.
         temp_xodr: Optional[Path] = None
         xodr_content: Optional[str] = None
         if xodr_path is not None:
@@ -150,10 +156,8 @@ class MapManager:
             candidate = carla_world.get_map().to_opendrive()
             if _has_geo_reference(candidate):
                 xodr_content = candidate
-                handle, name = tempfile.mkstemp(suffix=".xodr")
-                temp_xodr = Path(name)
-                with open(handle, "w", encoding="utf-8") as tmp:
-                    tmp.write(xodr_content)
+                temp_xodr = _carla_opendrive_dump_path(xodr_content)
+                temp_xodr.write_text(xodr_content, encoding="utf-8")
                 xodr_path = temp_xodr
 
         try:
@@ -165,6 +169,9 @@ class MapManager:
             else:
                 self._load_lanelet2_only(lanelet2_path, carla_world)
         finally:
+            # Always drop the dumped .xodr (on success or error) -- it is cheap to
+            # re-dump.  The expensive mapping-cache sidecar next to it is keyed on
+            # the same content-derived name, so it survives and is reused.
             if temp_xodr is not None:
                 temp_xodr.unlink(missing_ok=True)
 
@@ -555,6 +562,23 @@ def _parse_geo_reference(xodr_content: str) -> tuple[float, float, float]:
     alt = float(alt_match.group(1)) if alt_match else 0.0
 
     return lat, lon, alt
+
+
+def _carla_opendrive_dump_path(xodr_content: str) -> Path:
+    """Return a stable, content-derived path for a CARLA-sourced OpenDRIVE dump.
+
+    pyxodr / ``RoadNetwork`` read the OpenDRIVE from a *path*, so a CARLA-sourced
+    map (``world.get_map().to_opendrive()``) must be written to disk first.  The
+    filename is derived from a hash of the OpenDRIVE content rather than a random
+    ``tempfile.mkstemp`` name, so that the lanelet<->road mapping cache -- written
+    as a ``<stem>.mapping.json`` sidecar next to the .xodr -- gets a stable name.
+    That makes the (expensive) mapping reusable across runs for the same CARLA
+    level, and stops per-run random sidecars from accumulating.
+    """
+    digest = hashlib.sha256(xodr_content.encode("utf-8")).hexdigest()[:16]
+    cache_dir = Path(tempfile.gettempdir()) / "autoware_carla_scenario"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / f"carla-opendrive-{digest}.xodr"
 
 
 def _has_geo_reference(xodr_content: str) -> bool:

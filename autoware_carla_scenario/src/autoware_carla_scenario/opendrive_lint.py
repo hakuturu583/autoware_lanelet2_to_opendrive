@@ -2,16 +2,24 @@
 
 A map loaded Lanelet2-only (no ``.xodr`` and no CARLA-sourced OpenDRIVE; see
 :class:`~autoware_carla_scenario.coordinate.map_manager.MapManager`) cannot serve
-OpenDRIVE-based conditions or conversions.  Those only register at ``setup()``
-time -- after CARLA is up -- so the framework scans the scenario's *source*
-before running it and fails fast, rather than after spinning CARLA up.
+OpenDRIVE-based conversions.  The precise, authoritative guard against that is at
+run time: the :class:`MapManager` accessors (notably :attr:`MapManager.road_network`)
+raise exactly when -- and only when -- an OpenDRIVE code path is actually reached.
+A scenario that references an OpenDRIVE-capable condition but never exercises its
+OpenDRIVE path on a Lanelet2-only map is therefore *not* rejected.
 
-Rather than maintain a hand-written list of OpenDRIVE-requiring names, each such
-condition/function declares itself with the :func:`requires_opendrive` decorator.
-The decorator is the single source of truth: it both documents the requirement at
-the definition and registers the name the source scan looks for.  The
-:class:`MapManager` accessors remain the hard guarantee for anything the scan
-cannot see (fully dynamic construction).
+The decorator here is deliberately narrow: it marks only the OpenDRIVE **leaf**
+functions -- the lowest-level operations that unavoidably need OpenDRIVE
+(``to_opendrive``, ``project_onto_road``, the stop-line pose lookups).  Higher-level
+condition classes (``EntityLanePositionCondition`` etc.) are intentionally *not*
+decorated: they touch OpenDRIVE only *through* these leaves, so their requirement is
+already enforced -- precisely, at the reached code path -- by the runtime accessors.
+
+The source scan (:func:`check_scenario_source`) is thus a best-effort *early* check
+for the one unambiguous case a static read can be sure of: a scenario whose source
+*directly* names an OpenDRIVE-only leaf.  That is the only situation where failing
+before spinning CARLA up is provably correct rather than a guess about which runtime
+path a condition will take.
 """
 
 from __future__ import annotations
@@ -29,11 +37,15 @@ _OPENDRIVE_SYMBOLS: set[str] = set()
 
 
 def requires_opendrive(obj: _T) -> _T:
-    """Mark a condition class or function as needing OpenDRIVE.
+    """Mark an OpenDRIVE **leaf** function as unavoidably needing OpenDRIVE.
 
-    Sets ``requires_opendrive = True`` on *obj* (self-documenting, and usable for
-    a runtime check on registered conditions) and registers its name for the
-    source scan (:func:`find_opendrive_symbols`).
+    Sets ``requires_opendrive = True`` on *obj* (self-documenting) and registers its
+    name for the source scan (:func:`find_opendrive_symbols`).
+
+    Apply this only to the lowest-level functions that cannot run without OpenDRIVE,
+    not to higher-level condition classes that merely call into them -- those are
+    guarded precisely at run time by the :class:`MapManager` accessors, so decorating
+    them would reject scenarios that never actually reach an OpenDRIVE code path.
     """
     obj.requires_opendrive = True  # type: ignore[attr-defined]
     _OPENDRIVE_SYMBOLS.add(obj.__name__)  # type: ignore[attr-defined]
