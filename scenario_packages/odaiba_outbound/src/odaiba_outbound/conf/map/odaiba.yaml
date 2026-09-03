@@ -10,5 +10,8 @@
 # `scenario=odaiba_outbound/default` works out of the box.  Override with:
 #   uv run scenario map=odaiba map.lanelet2_path=/other/path.osm
 map:
-  name: OdaibaMap
+  # Must match the CARLA server's map asset name (short name or full asset path);
+  # the runner loads this world via load_map_by_name. On CARLA 0.10.0 the Odaiba
+  # map is exposed as 'Odaiba'.
+  name: Odaiba
   lanelet2_path: ${oc.env:ODAIBA_LANELET2_PATH}
