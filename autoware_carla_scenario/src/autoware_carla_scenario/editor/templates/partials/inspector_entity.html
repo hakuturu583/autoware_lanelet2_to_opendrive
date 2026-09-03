@@ -1,28 +1,29 @@
 {% import "partials/fields.html" as f %}
 {% import "partials/constraint_node.html" as cons %}
+{% import "partials/icons.html" as ic %}
 
 <form hx-post="/draft/{{ draft.id }}/entity/{{ target.id }}"
       hx-trigger="change delay:200ms" hx-target="#editor-body" hx-swap="innerHTML">
   <p class="ed-kicker">{{ 'Ego vehicle' if target.kind == 'ego' else 'Vehicle' }}</p>
   <h3 class="ed-heading">{{ target.display_name }}</h3>
 
-  <div class="mb-3">
+  <div class="ed-field">
     <label class="ed-label">Name</label>
     <input type="text" name="title" class="ed-input" value="{{ target.title }}">
   </div>
-  <div class="mb-3">
+  <div class="ed-field">
     <label class="ed-label">CARLA blueprint</label>
-    <input type="text" name="vehicle_type" class="ed-input font-mono text-xs"
+    <input type="text" name="vehicle_type" class="ed-input mono" style="font-size:11.5px"
            value="{{ target.vehicle_type }}">
   </div>
-  <div class="mb-4">
-    <label class="ed-label">Initial speed <span class="text-gray-400 font-normal">(km/h)</span></label>
+  <div class="ed-field">
+    <label class="ed-label">Initial speed <span class="unit">(km/h)</span></label>
     <input type="number" step="any" name="initial_speed_kmh" class="ed-input"
            value="{{ target.initial_speed_kmh }}">
   </div>
 
-  <h4 class="ed-subheading">Spawn</h4>
-  <div class="mb-3">
+  <h4 class="ed-subheading">{{ ic.icon('target', 12) }} Spawn</h4>
+  <div class="ed-field">
     <label class="ed-label">Spawn mode</label>
     <select name="spawn_mode" class="ed-input">
       <option value="fixed" {% if target.spawn.mode == 'fixed' %}selected{% endif %}>Fixed</option>
@@ -35,31 +36,28 @@
       sweeper; the ID below is the default a non-swept run uses.
     </p>
   </div>
-  <div class="mb-3">
+  <div class="ed-field">
     <label class="ed-label">Lanelet ID</label>
     <input type="number" step="1" name="spawn_lanelet_id" class="ed-input"
-           value="{{ target.spawn.lanelet_id }}">
+           id="spawn-lanelet-input" value="{{ target.spawn.lanelet_id }}">
   </div>
 
-  <h4 class="ed-subheading">Position on the matched lanelet</h4>
-  <div class="mb-3 space-y-1.5">
-    <label class="flex items-center gap-2 text-sm">
+  <h4 class="ed-subheading">{{ ic.icon('bar', 12) }} Position on the matched lanelet</h4>
+  <div class="ed-radio-row">
+    <label class="ed-radio">
       <input type="radio" name="spawn_s_mode" value="fixed"
-             {% if target.spawn.s.mode == 'fixed' %}checked{% endif %}
-             class="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500">
+             {% if target.spawn.s.mode == 'fixed' %}checked{% endif %}>
       <span>Fixed</span>
     </label>
-    <label class="flex items-center gap-2 text-sm">
+    <label class="ed-radio">
       <input type="radio" name="spawn_s_mode" value="derived"
-             {% if target.spawn.s.mode == 'derived' %}checked{% endif %}
-             class="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500">
+             {% if target.spawn.s.mode == 'derived' %}checked{% endif %}>
       <span>Derived</span>
     </label>
   </div>
-  <div class="mb-3">
+  <div class="ed-field">
     <label class="ed-label">
-      {{ 'Offset' if target.spawn.s.mode == 'fixed' else 'Default offset' }}
-      <span class="text-gray-400 font-normal">(m)</span>
+      {{ 'Offset' if target.spawn.s.mode == 'fixed' else 'Default offset' }} <span class="unit">(m)</span>
     </label>
     <input type="number" step="any" name="spawn_s" class="ed-input" value="{{ target.spawn.s.value }}">
   </div>
@@ -69,7 +67,7 @@
     {% set binding_type = binding.type if binding else 'stop_line_offset' %}
     {% set binding_spec = get_binding_spec(binding_type) %}
     <div class="ed-derived">
-      <div class="mb-3">
+      <div class="ed-field">
         <label class="ed-label">Derived from</label>
         <select name="binding_type" class="ed-input">
           {% for spec in binding_specs() %}
@@ -90,30 +88,34 @@
 </form>
 
 {% if target.spawn.mode == 'constraint_search' %}
-  <h4 class="ed-subheading">Candidate lanelets</h4>
-  <div class="ed-cons-root mb-3">
+  <h4 class="ed-subheading">{{ ic.icon('map', 12) }} Candidate lanelets</h4>
+  <div class="ed-cons-root" style="margin-bottom:12px">
     {% for node in target.spawn.constraints %}
       {{ cons.render(node, draft, target, selected, document) }}
     {% else %}
-      <p class="text-xs text-gray-500 mb-2">No constraints yet: every lanelet matches.</p>
+      <p class="ed-help" style="margin:0 0 6px">No constraints yet: every lanelet matches.</p>
     {% endfor %}
     {{ cons.add_constraint(draft, target) }}
   </div>
-
-  <div id="spawn-preview"
-       hx-post="/draft/{{ draft.id }}/spawn-preview"
-       hx-vals='{"entity_id": "{{ target.id }}"}'
-       hx-trigger="load delay:200ms"
-       hx-swap="innerHTML">
-    <p class="text-xs text-gray-400">Evaluating constraints&hellip;</p>
-  </div>
+{% else %}
+  <h4 class="ed-subheading">{{ ic.icon('map', 12) }} On the map</h4>
 {% endif %}
 
+{# Shown for both spawn modes: a hand-typed lanelet ID is worth seeing on a map
+   too, and clicking one is the quickest way to change it. #}
+<div id="spawn-preview"
+     hx-post="/draft/{{ draft.id }}/spawn-preview"
+     hx-vals='{"entity_id": "{{ target.id }}"}'
+     hx-trigger="load delay:200ms"
+     hx-swap="innerHTML">
+  <p class="ed-help">Loading&hellip;</p>
+</div>
+
 {% if target.kind != 'ego' or document.entities|length > 1 %}
-  <button class="ed-btn-danger w-full mt-4"
+  <button class="ed-btn-danger" style="width:100%; margin-top:16px"
           hx-post="/draft/{{ draft.id }}/entity/{{ target.id }}/delete"
           hx-target="#editor-body" hx-swap="innerHTML"
           hx-confirm="Delete this actor, its actions and every predicate that names it?">
-    Delete actor
+    {{ ic.icon('trash', 13) }} Delete actor
   </button>
 {% endif %}

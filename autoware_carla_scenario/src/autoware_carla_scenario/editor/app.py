@@ -35,6 +35,27 @@ _STATIC_DIR = _EDITOR_DIR / "static"
 #: Environment variable choosing where exported packages are written.
 EXPORT_DIR_ENV = "SCENARIO_EDITOR_EXPORT_DIR"
 
+#: Environment variable pointing at a self-hosted build of the simple_lanelet2
+#: web viewer.  See :data:`DEFAULT_MAP_VIEWER_URL`.
+MAP_VIEWER_ENV = "SCENARIO_EDITOR_MAP_VIEWER"
+
+#: The Lanelet2 map viewer the spawn preview mounts: a wasm renderer published
+#: by ``simple_lanelet2``, the same project that provides the ``lanelet2``
+#: Python API this framework runs on.  It gives the preview real map drawing,
+#: pan and zoom, and click-to-pick for free -- none of which is worth
+#: reimplementing in an SVG.
+#:
+#: It is loaded from the project's GitHub Pages build because the wasm module is
+#: built, not committed.  Point :data:`MAP_VIEWER_ENV` at ``tools/build_web.sh``
+#: output to serve it yourself; when it cannot be loaded at all the preview
+#: falls back to a server-rendered SVG, so an offline editor still works.
+DEFAULT_MAP_VIEWER_URL = "https://hakuturu583.github.io/simple_lanelet2/viewer.js"
+
+
+def map_viewer_url() -> str:
+    """Return the URL the spawn preview loads the map viewer from."""
+    return os.environ.get(MAP_VIEWER_ENV, DEFAULT_MAP_VIEWER_URL).strip()
+
 
 def default_export_dir() -> Path:
     """Return the directory exported scenario packages are written to."""
@@ -73,6 +94,7 @@ def create_app(
     # The templates render primitives from their metadata rather than branching
     # on type, so the registry is the one global they genuinely need.
     templates.env.globals.update(
+        map_viewer_url=map_viewer_url,
         action_specs=registry.action_specs,
         condition_specs=registry.condition_specs,
         constraint_specs=registry.constraint_specs,

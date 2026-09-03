@@ -8,11 +8,9 @@
   {%- set name = prefix ~ spec.name -%}
   {%- set current = spec.default if value is none else value -%}
   {% if spec.kind == 'bool' %}
-    <label class="flex items-center gap-2 text-sm text-gray-700">
-      <input type="checkbox" name="{{ name }}" value="on"
-             {% if current %}checked{% endif %}
-             class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-      <span>{{ spec.label }}</span>
+    <label class="ed-check">
+      <input type="checkbox" name="{{ name }}" value="on" {% if current %}checked{% endif %}>
+      <span>{{ spec.label }}{% if spec.help %}<span class="ed-help">{{ spec.help }}</span>{% endif %}</span>
     </label>
   {% elif spec.kind == 'select' %}
     <select name="{{ name }}" class="ed-input">
@@ -27,14 +25,13 @@
     <select name="{{ name }}" class="ed-input">
       <option value="" {% if not current %}selected{% endif %}>— choose —</option>
       {% for entity in document.entities %}
-        <option value="{{ entity.id }}"
-                {% if current == entity.id %}selected{% endif %}>
+        <option value="{{ entity.id }}" {% if current == entity.id %}selected{% endif %}>
           {{ entity.display_name }}
         </option>
       {% endfor %}
     </select>
   {% elif spec.kind in ('int_list', 'int_list_or_ref') %}
-    <input type="text" name="{{ name }}" class="ed-input font-mono"
+    <input type="text" name="{{ name }}" class="ed-input mono"
            value="{{ current if current is string else (current or [])|join(', ') }}"
            {% if spec.kind == 'int_list_or_ref' %}list="ref-values"{% endif %}
            placeholder="{{ '3, 4, 41' if spec.kind == 'int_list' else '3, 4, 41  or  ${map.no_3d_model_lanelet_ids}' }}">
@@ -53,15 +50,14 @@
 
 {% macro field(spec, params, document, prefix='') %}
   {%- set value = params.get(spec.name, spec.default) -%}
-  <div class="mb-3">
+  <div class="ed-field">
     {% if spec.kind != 'bool' %}
       <label class="ed-label">
-        {{ spec.label }}
-        {% if spec.unit %}<span class="text-gray-400 font-normal">({{ spec.unit }})</span>{% endif %}
+        {{ spec.label }}{% if spec.unit %} <span class="unit">({{ spec.unit }})</span>{% endif %}
       </label>
     {% endif %}
     {{ control(spec, value, document, prefix) }}
-    {% if spec.help %}<p class="ed-help">{{ spec.help }}</p>{% endif %}
+    {% if spec.help and spec.kind != 'bool' %}<p class="ed-help">{{ spec.help }}</p>{% endif %}
   </div>
 {% endmacro %}
 
@@ -82,19 +78,19 @@
     {%- set value = node.params.get(visual.value) if visual.value else none -%}
     {%- set rule = node.params.get(visual.rule) if visual.rule else none -%}
     <div class="pred-subject">
-      {% if subject %}{{ entity_label(subject, document) }}{% endif %}
-      {% if subject and target is not none %}<span class="pred-arrow">&rarr;</span>{% endif %}
-      {% if target is not none %}{{ entity_label(target, document) }}{% endif %}
-      {% if not subject and target is none %}<span class="text-gray-400">world</span>{% endif %}
+      {% if subject %}<span>{{ entity_label(subject, document) }}</span>{% endif %}
+      {% if subject and target is not none %}<span class="pred-arrow">&#8594;</span>{% endif %}
+      {% if target is not none %}<span>{{ entity_label(target, document) }}</span>{% endif %}
+      {% if not subject and target is none %}<span class="pred-world">world</span>{% endif %}
     </div>
     <div class="pred-metric">{{ visual.metric }}</div>
     <div class="pred-value">
       {% if rule %}<span class="pred-op">{{ rule_symbol(rule) }}</span>{% endif %}
-      {% if value is not none %}{{ value }}{% if visual.unit %} {{ visual.unit }}{% endif %}
+      {% if value is not none %}{{ value }}{% if visual.unit %} <span class="pred-unit">{{ visual.unit }}</span>{% endif %}
       {% elif visual.value_label %}{{ visual.value_label }}{% endif %}
     </div>
   {% else %}
-    <div class="pred-metric text-red-600">Unknown predicate “{{ node.type }}”</div>
+    <div class="pred-metric" style="color:var(--fail)">Unknown predicate “{{ node.type }}”</div>
   {% endif %}
 {% endmacro %}
 

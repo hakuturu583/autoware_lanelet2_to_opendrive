@@ -1,6 +1,6 @@
-<div class="rounded-lg border px-4 py-2 text-sm
-            {% if tone == 'ok' %}border-green-200 bg-green-50 text-green-800
-            {% elif tone == 'error' %}border-red-200 bg-red-50 text-red-800
-            {% else %}border-gray-200 bg-white text-gray-700{% endif %}">
-  {{ message }}
+{% import "partials/icons.html" as ic %}
+<div class="ed-notice {{ 'ed-notice-ok' if tone == 'ok' else ('ed-notice-bad' if tone == 'error' else '') }}"
+     style="margin-bottom:12px">
+  {{ ic.icon('check' if tone == 'ok' else 'alert', 15) }}
+  <div>{{ message }}</div>
 </div>

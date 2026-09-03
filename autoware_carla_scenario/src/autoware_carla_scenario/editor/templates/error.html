@@ -1,9 +1,15 @@
 {% extends "base.html" %}
-{% block title %}Not found &middot; Scenario Editor{% endblock %}
+{% import "partials/icons.html" as ic %}
+{% block title %}Not found · Scenario Editor{% endblock %}
 {% block content %}
-<div class="max-w-xl mx-auto bg-white rounded-lg border border-gray-200 p-8 text-center">
-  <h2 class="text-lg font-semibold text-gray-800 mb-2">{{ heading }}</h2>
-  <p class="text-sm text-gray-600 mb-5">{{ message }}</p>
-  <a href="/" class="ed-btn-primary inline-block">Back to drafts</a>
+<div class="ed-panel" style="max-width:520px; margin:48px auto">
+  <div class="ed-panel-body" style="text-align:center; padding:36px 24px">
+    <div style="color:var(--ink-faint); display:flex; justify-content:center; margin-bottom:12px">
+      {{ ic.icon('alert', 28) }}
+    </div>
+    <h2 class="ed-heading">{{ heading }}</h2>
+    <p class="ed-help" style="margin-bottom:20px">{{ message }}</p>
+    <a href="/" class="ed-btn-primary">Back to drafts</a>
+  </div>
 </div>
 {% endblock %}

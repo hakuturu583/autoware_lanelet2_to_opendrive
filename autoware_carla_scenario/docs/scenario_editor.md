@@ -30,7 +30,8 @@ the same `sweeper.constraints` engine a `--multirun` sweep uses.
 ## The canvas
 
 The main view is a **swimlane DAG**: one lane per actor, with the horizontal
-axis reading as *scenario progression*, not time.
+axis reading as *scenario progression*, not time. Actions that act on the
+environment rather than a vehicle get a **World** lane of their own.
 
 ```
 Ego
@@ -100,9 +101,30 @@ sweep:
 ```
 
 **Preview matches** evaluates that tree against the real Lanelet2 map and
-reports, for example, `133 matched lanelets of 979`, drawing them over a simple
-SVG of the map. Loading a map is opt-in and cached; if the map files are missing
-the count is unavailable but the constraint editor keeps working.
+reports, for example, `133 matched of 979 lanelets`. Loading a map is opt-in and
+cached; if the map files are missing the count is unavailable but the constraint
+editor keeps working.
+
+### The map
+
+The drawing comes from
+[`simple_lanelet2`](https://github.com/hakuturu583/simple_lanelet2)'s wasm map
+viewer — the same project that provides the `lanelet2` Python API this framework
+runs on. The editor serves the scenario's `.osm` at
+`/draft/<id>/map.osm`, the viewer parses and renders it in the browser, and the
+editor drives it through two calls: `setHighlight()` with the matched IDs, and a
+`select` listener that turns **clicking a lanelet into setting the spawn
+lanelet**.
+
+Constraint evaluation stays on the server, in the framework's own sweeper — the
+viewer only draws. That split is deliberate: a second constraint engine in
+JavaScript could disagree with the sweep the scenario will actually run.
+
+The module is loaded from the project's GitHub Pages build, because the wasm is
+built rather than committed. It is optional: when it cannot be fetched the panel
+falls back to a server-rendered SVG and the match count is unaffected, so an
+air-gapped editor still works. Point `SCENARIO_EDITOR_MAP_VIEWER` at the output
+of `simple_lanelet2`'s `tools/build_web.sh` to serve it yourself.
 
 ### Derived offsets
 
@@ -238,7 +260,8 @@ guess.
 | `SCENARIO_EDITOR_DRAFTS` | `./scenario_drafts` | Where drafts are stored |
 | `SCENARIO_EDITOR_EXPORT_DIR` | `./scenario_packages` | Default export destination |
 | `SCENARIO_EDITOR_HOST` | `0.0.0.0` | Bind address |
-| `SCENARIO_EDITOR_PORT` | `9100` | Bind port (the viewer uses 9000) |
+| `SCENARIO_EDITOR_PORT` | `9100` | Bind port (the result viewer uses 9000) |
+| `SCENARIO_EDITOR_MAP_VIEWER` | GitHub Pages build | URL of `simple_lanelet2`'s `viewer.js` |
 
 ## Running an authored scenario
 
@@ -258,3 +281,16 @@ uv run scenario --multirun scenario=cut_in map=nishishinjuku \
 The CARLA client is an optional extra and is **not** locked, because the client
 wheel is not published to PyPI; install it into the same environment before
 running against a live server.
+
+## Offline
+
+Only two things in the editor come from the network, and neither is load-bearing
+for editing:
+
+| | |
+| --- | --- |
+| htmx | every interaction; the editor needs it |
+| `simple_lanelet2`'s map viewer | the map drawing only — falls back to a server-rendered SVG |
+
+The stylesheet is served by the app itself rather than by a CDN, so a blocked
+egress rule cannot take the layout with it.

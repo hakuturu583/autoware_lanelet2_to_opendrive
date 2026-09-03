@@ -1,28 +1,35 @@
+{% import "partials/icons.html" as ic %}
 {% if report.errors %}
-  <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-    <p class="text-sm font-semibold text-red-800 mb-1">
-      {{ report.errors|length }} error{{ '' if report.errors|length == 1 else 's' }}
-      &mdash; this scenario cannot be exported yet
-    </p>
-    <ul class="text-sm text-red-700 space-y-0.5">
-      {% for issue in report.errors %}
-        <li><span class="font-mono text-xs text-red-500">{{ issue.path }}</span> {{ issue.message }}</li>
-      {% endfor %}
-    </ul>
+  <div class="ed-notice ed-notice-bad">
+    {{ ic.icon('alert', 15) }}
+    <div style="min-width:0">
+      <div class="ed-notice-title">
+        {{ report.errors|length }} error{{ '' if report.errors|length == 1 else 's' }} — this scenario cannot be exported yet
+      </div>
+      <ul>
+        {% for issue in report.errors %}
+          <li><span class="path">{{ issue.path }}</span>{{ issue.message }}</li>
+        {% endfor %}
+      </ul>
+    </div>
   </div>
 {% elif report.warnings %}
-  <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-    <p class="text-sm font-semibold text-amber-900 mb-1">
-      Valid, with {{ report.warnings|length }} warning{{ '' if report.warnings|length == 1 else 's' }}
-    </p>
-    <ul class="text-sm text-amber-800 space-y-0.5">
-      {% for issue in report.warnings %}
-        <li><span class="font-mono text-xs text-amber-600">{{ issue.path }}</span> {{ issue.message }}</li>
-      {% endfor %}
-    </ul>
+  <div class="ed-notice ed-notice-warn">
+    {{ ic.icon('alert', 15) }}
+    <div style="min-width:0">
+      <div class="ed-notice-title">
+        Valid, with {{ report.warnings|length }} warning{{ '' if report.warnings|length == 1 else 's' }}
+      </div>
+      <ul>
+        {% for issue in report.warnings %}
+          <li><span class="path">{{ issue.path }}</span>{{ issue.message }}</li>
+        {% endfor %}
+      </ul>
+    </div>
   </div>
 {% else %}
-  <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800">
-    Valid &mdash; ready to export.
+  <div class="ed-notice ed-notice-ok">
+    {{ ic.icon('check', 15) }}
+    <div><span class="ed-notice-title">Valid</span> — ready to export.</div>
   </div>
 {% endif %}

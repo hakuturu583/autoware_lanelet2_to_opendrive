@@ -100,11 +100,16 @@ class TestPages:
     ) -> None:
         """The reading the whole canvas is built around."""
         body = client.get(f"/draft/{draft_id}/canvas").text
-        assert "Distance" in body
-        assert "20.0 m" in body
-        assert "TTC" in body
-        assert "4.0 s" in body
-        assert "&rarr;" in body or "→" in body
+        # Subject and target, the metric, and the value with its unit -- asserted
+        # as the pieces the reading is made of rather than as one literal string,
+        # so restyling the chip does not look like a regression.
+        assert 'class="pred-subject"' in body
+        assert "&#8594;" in body or "→" in body
+        assert ">Distance<" in body
+        assert ">TTC<" in body
+        for value, unit in (("20.0", "m"), ("4.0", "s")):
+            assert value in body
+            assert '<span class="pred-unit">%s</span>' % unit in body
 
     def test_triggers_are_attached_to_actions_not_a_separate_lane(
         self, client: TestClient, draft_id: str
@@ -132,6 +137,23 @@ class TestPages:
         response = client.get("/draft/does_not_exist")
         assert response.status_code == 404
         assert "Back to drafts" in response.text
+
+    def test_the_page_styles_itself_without_a_cdn(
+        self, client: TestClient, draft_id: str
+    ) -> None:
+        """The editor is often run on a closed network; layout must not be remote."""
+        body = client.get(f"/draft/{draft_id}").text
+        assert '<link rel="stylesheet" href="/static/editor.css">' in body
+        assert "cdn.tailwindcss.com" not in body
+        assert client.get("/static/editor.css").status_code == 200
+
+    def test_an_inspector_can_be_opened_without_javascript(
+        self, client: TestClient, draft_id: str
+    ) -> None:
+        """?selected= renders server-side, so a deep link works and so do tests."""
+        body = client.get(f"/draft/{draft_id}?selected=npc1").text
+        assert "Candidate lanelets" in body
+        assert "Constraint search" in body
 
 
 class TestEntityEditing:
@@ -384,8 +406,93 @@ class TestSpawnConstraints:
             f"/draft/{draft_id}/spawn-preview", data={"entity_id": "npc1"}
         )
         assert response.status_code == 200
-        assert "not evaluated" in response.text
+        assert "Not evaluated yet" in response.text
         assert "Preview matches" in response.text
+
+    def test_the_map_is_served_for_the_wasm_viewer(
+        self, client: TestClient, draft_id: str
+    ) -> None:
+        """The viewer parses the .osm in the browser, so the editor serves it."""
+        response = client.get(f"/draft/{draft_id}/map.osm")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/xml")
+        assert b"<osm" in response.content[:512]
+
+    def test_a_scenario_without_a_map_file_cannot_serve_one(
+        self, client: TestClient, draft_id: str
+    ) -> None:
+        client.post(f"/draft/{draft_id}/scenario", data={"map_lanelet2_path": ""})
+        response = client.get(f"/draft/{draft_id}/map.osm")
+        assert response.status_code == 404
+        assert "Lanelet2" in response.text
+
+    def test_the_preview_hands_the_viewer_what_it_needs(
+        self, client: TestClient, draft_id: str
+    ) -> None:
+        """The data attributes on the frame are the whole client-side contract."""
+        from autoware_carla_scenario.editor import map_preview
+
+        map_preview.clear_cache()
+        body = client.post(
+            f"/draft/{draft_id}/spawn-preview",
+            data={"entity_id": "npc1", "load_map": "1"},
+        ).text
+        assert 'data-map-src="/draft/%s/map.osm"' % draft_id in body
+        assert 'data-entity="npc1"' in body
+        assert "data-matched=" in body
+        assert "hakuturu583.github.io/simple_lanelet2/viewer.js" in body
+
+    def test_the_viewer_frame_is_hidden_until_the_module_loads(
+        self, client: TestClient, draft_id: str
+    ) -> None:
+        """An empty box where a map should be is worse than no box."""
+        from autoware_carla_scenario.editor import map_preview
+
+        map_preview.clear_cache()
+        body = client.post(
+            f"/draft/{draft_id}/spawn-preview",
+            data={"entity_id": "npc1", "load_map": "1"},
+        ).text
+        assert '<div class="ed-map-frame" hidden' in body
+        # The server-rendered SVG is what an offline editor falls back to.
+        assert "data-map-fallback" in body
+
+    def test_a_self_hosted_viewer_can_be_configured(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoware_carla_scenario.editor import map_preview
+        from autoware_carla_scenario.editor.app import MAP_VIEWER_ENV, create_app
+
+        monkeypatch.setenv(MAP_VIEWER_ENV, "/vendor/viewer.js")
+        map_preview.clear_cache()
+        client = TestClient(create_app(draft_dir=tmp_path / "drafts"))
+        draft_id = (
+            client.post("/new", data={"kind": "cut_in"}, follow_redirects=False)
+            .headers["location"]
+            .rsplit("/", 1)[-1]
+        )
+        body = client.post(
+            f"/draft/{draft_id}/spawn-preview",
+            data={"entity_id": "npc1", "load_map": "1"},
+        ).text
+        assert 'data-map-viewer="/vendor/viewer.js"' in body
+
+    def test_a_fixed_spawn_is_shown_on_the_map_too(
+        self, client: TestClient, draft_id: str
+    ) -> None:
+        """A hand-typed lanelet ID is worth seeing, and clicking one is faster."""
+        from autoware_carla_scenario.editor import map_preview
+
+        map_preview.clear_cache()
+        body = client.post(
+            f"/draft/{draft_id}/spawn-preview",
+            data={"entity_id": "ego", "load_map": "1"},
+        ).text
+        assert "ed-map-frame" in body
+        assert 'data-entity="ego"' in body
+        assert "183" in body  # the ego's fixed spawn lanelet
+        # No match list: there are no constraints to match.
+        assert "matched of" not in body
 
     def test_preview_reports_an_unloadable_map_without_failing(
         self, client: TestClient, store: DraftStore, draft_id: str

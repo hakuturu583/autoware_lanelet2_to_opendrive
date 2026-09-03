@@ -4,26 +4,27 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Scenario Editor{% endblock %}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  {# The stylesheet is served by this app, not a CDN: the editor is a local tool
+     that is often run beside a simulator on a closed network, and a blocked CDN
+     should not be the difference between a plain page and an unusable one. #}
   <link rel="stylesheet" href="/static/editor.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
 </head>
-<body class="bg-gray-50 min-h-screen text-gray-800">
-  <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
-    <div class="max-w-[1600px] mx-auto px-4 py-3 flex items-center justify-between gap-4">
-      <div class="flex items-baseline gap-3 min-w-0">
-        <a href="/" class="text-xl font-bold text-gray-800 hover:text-blue-600 transition-colors">
-          Scenario Editor
-        </a>
-        {% block subtitle %}{% endblock %}
-      </div>
-      <div class="flex items-center gap-2">
-        {% block actions %}{% endblock %}
-      </div>
+<body>
+  {% import "partials/icons.html" as ic %}
+  <header class="ed-bar">
+    <div class="ed-bar-inner">
+      <a href="/" class="ed-brand">
+        <span class="ed-brand-mark">{{ ic.icon('logo', 14) }}</span>
+        Scenario Editor
+      </a>
+      {% block crumb %}{% endblock %}
+      <div class="ed-bar-spacer"></div>
+      <div class="ed-bar-actions">{% block actions %}{% endblock %}</div>
     </div>
-  </nav>
+  </header>
 
-  <main class="max-w-[1600px] mx-auto px-4 py-4">
+  <main class="ed-shell">
     {% block content %}{% endblock %}
   </main>
 

@@ -15,7 +15,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    PlainTextResponse,
+    RedirectResponse,
+)
 
 from ..authoring.models import ScenarioDocument
 from ..authoring.package_export import PackageExportError, export_package
@@ -204,6 +209,34 @@ def inspector(request: Request, draft_id: str, object_id: str) -> HTMLResponse:
         request=request,
         name="partials/inspector.html",
         context=_context(request, draft, object_id),
+    )
+
+
+@router.get("/draft/{draft_id}/map.osm")
+def map_source(request: Request, draft_id: str) -> FileResponse:
+    """Serve the draft's Lanelet2 map so the wasm viewer can render it.
+
+    The viewer parses the ``.osm`` in the browser, which is why the editor
+    serves the file rather than a projection of it: the drawing, the pan and
+    zoom, and the picking all happen client-side, and the server keeps doing
+    the one thing only it can -- evaluating constraints with the real sweeper.
+
+    Raises:
+        EditorError: If the draft has no readable Lanelet2 file, which the app
+            renders as a 404 rather than a broken viewer.
+    """
+    draft = _service(request).require_draft(draft_id)
+    source = map_preview.lanelet2_source(draft.document)
+    if source is None:
+        raise EditorError(
+            "This scenario has no readable Lanelet2 (.osm) file. Set the path "
+            "in the Scenario inspector."
+        )
+    return FileResponse(
+        source,
+        media_type="application/xml",
+        filename=source.name,
+        headers={"Cache-Control": "no-cache"},
     )
 
 

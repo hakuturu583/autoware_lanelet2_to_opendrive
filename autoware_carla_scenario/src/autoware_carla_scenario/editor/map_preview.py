@@ -31,6 +31,7 @@ __all__ = [
     "clear_cache",
     "evaluate_spawn",
     "is_map_loaded",
+    "lanelet2_source",
     "materialize_constraints",
 ]
 
@@ -75,6 +76,8 @@ class PreviewResult:
     """What a spawn preview found.
 
     Attributes:
+        searching: Whether the entity spawns by constraint search.  A fixed
+            spawn still gets a map, just no match list.
         matched_ids: Lanelet IDs satisfying the constraints.
         total: Lanelets in the map, for "37 of 812".
         constraint_count: How many top-level constraints were evaluated.
@@ -84,6 +87,7 @@ class PreviewResult:
         error: Why the map or the constraints could not be evaluated.
     """
 
+    searching: bool = True
     matched_ids: list[int] = field(default_factory=list)
     total: int = 0
     constraint_count: int = 0
@@ -131,6 +135,19 @@ def materialize_constraints(
 # ---------------------------------------------------------------------------
 # Map loading
 # ---------------------------------------------------------------------------
+
+
+def lanelet2_source(document: ScenarioDocument) -> Optional[Path]:
+    """Return the document's Lanelet2 file, if it is configured and readable.
+
+    The wasm viewer renders the map itself, so the editor only has to hand it
+    the ``.osm``; this is the one place that decides which file that is.
+    """
+    configured = document.map.lanelet2_path
+    if not configured:
+        return None
+    path = Path(configured).expanduser()
+    return path if path.is_file() else None
 
 
 def _cache_key(document: ScenarioDocument) -> Optional[tuple[str, str]]:
@@ -245,9 +262,13 @@ def evaluate_spawn(
 ) -> PreviewResult:
     """Evaluate *entity*'s spawn constraints against the document's map.
 
+    A fixed spawn is previewed too, without a match list: seeing where the
+    lanelet actually is -- and being able to click a different one -- is just as
+    useful when the ID was typed by hand.
+
     Args:
         document: The scenario being edited.
-        entity: The entity whose spawn search is previewed.
+        entity: The entity whose spawn is previewed.
         load_map: Parse the map when it is not cached yet.  Left off, an
             unloaded map returns a result that still describes the constraints,
             so editing them never waits on a map.
@@ -257,16 +278,15 @@ def evaluate_spawn(
         :attr:`PreviewResult.error` rather than raised: the constraint builder
         has to keep working on a machine with no map files.
     """
+    searching = entity.spawn.mode == "constraint_search"
     constraint_count = len(entity.spawn.constraints)
     result = PreviewResult(
+        searching=searching,
         constraint_count=constraint_count,
         selected_id=entity.spawn.lanelet_id or None,
     )
 
-    if entity.spawn.mode != "constraint_search":
-        result.error = "This entity uses a fixed spawn."
-        return result
-    if not constraint_count:
+    if searching and not constraint_count:
         result.error = "Add a constraint to see which lanelets match."
         return result
 
@@ -282,6 +302,9 @@ def evaluate_spawn(
     result.map_loaded = True
     result.geometry = loaded.geometry
     result.total = loaded.lanelet_count
+
+    if not searching:
+        return result
 
     from ..sweeper.constraints import (  # noqa: PLC0415
         find_matching_lanelets,
