@@ -3,11 +3,11 @@
 This module lives in a separate installable package, not inside
 ``autoware_carla_scenario``.  It only depends on the framework's public API.
 
-The Odaiba map is loaded as a lanelet2-only map (no OpenDRIVE), so the pass
-condition is expressed purely in Lanelet2 coordinates: a rectangular box around
-the goal centerline point, checked with :class:`EntityInAreaCondition` (which
-converts its Lanelet2 vertices straight to CARLA world coordinates -- no
-OpenDRIVE road network required).
+The pass condition is expressed purely in Lanelet2 coordinates so it needs no
+OpenDRIVE road network: a rectangular box around the goal centerline point,
+checked with :class:`EntityInAreaCondition` (which converts its Lanelet2
+vertices straight to CARLA world coordinates -- no OpenDRIVE road network
+required).
 
 Note: importing this module pulls in :class:`BaseScenario`, which imports CARLA
 at module scope, so it requires the framework's runtime environment.  The

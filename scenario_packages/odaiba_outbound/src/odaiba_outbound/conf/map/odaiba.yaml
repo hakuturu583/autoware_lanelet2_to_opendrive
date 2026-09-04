@@ -1,9 +1,12 @@
 # @package _global_
-# Odaiba map configuration (lanelet2-only, no OpenDRIVE).
+# Odaiba map configuration.
 #
-# No `xodr_path` is set: the framework loads this as a lanelet2-only map, so a
-# scenario selecting `map=odaiba` must express positions in Lanelet2 coordinates
-# (OpenDRIVE-based conditions are rejected before the run starts).
+# No `xodr_path` is set here: at run time the OpenDRIVE is sourced from the live
+# CARLA 'Odaiba' map (its geoReference gives the projection origin), so ordinary
+# scenarios need no bundled .xodr.  The `ego.entity=autoware_ego` closed-loop
+# build is the exception -- it derives the initial/goal pose *before* CARLA is up
+# and therefore needs OpenDRIVE from a file: set `map.xodr_path` to a bundled
+# .xodr when running autoware_ego.
 #
 # `lanelet2_path` defaults to the map bundled inside this package -- register()
 # sets ODAIBA_LANELET2_PATH to that bundled file if it is not already set, so

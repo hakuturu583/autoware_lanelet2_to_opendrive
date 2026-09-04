@@ -15,9 +15,9 @@ class OdaibaOutboundConfig:
     """Parameters for the ``odaiba_outbound`` scenario.
 
     The goal is expressed in Lanelet2 (Frenet) coordinates so the pass check
-    works on a lanelet2-only map -- no OpenDRIVE required.  A rectangular box
-    around the goal centerline point (``goal_s`` +/- ``goal_box_half_length``,
-    ``t`` in +/- ``goal_box_half_width``) defines the pass area.
+    needs no OpenDRIVE road network.  A rectangular box around the goal
+    centerline point (``goal_s`` +/- ``goal_box_half_length``, ``t`` in
+    +/- ``goal_box_half_width``) defines the pass area.
 
     Every field is overridable from YAML (and the CLI) via Hydra, e.g.::
 

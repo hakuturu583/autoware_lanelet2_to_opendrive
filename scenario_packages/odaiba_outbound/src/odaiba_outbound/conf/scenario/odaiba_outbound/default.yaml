@@ -10,7 +10,7 @@ defaults:
 scenario:
   name: odaiba_outbound
   # Pass when the ego enters a box around the goal centerline point (Aomi).
-  # Expressed in Lanelet2 coordinates so it needs no OpenDRIVE (lanelet2-only map).
+  # Expressed in Lanelet2 coordinates so the pass check needs no OpenDRIVE road network.
   goal_lanelet_id: 175965
   goal_s: 50.29
   goal_box_half_length: 5.0
