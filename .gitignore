@@ -28,3 +28,9 @@ site/
 
 # Scenario output
 scenario_outputs
+
+# Scenario Editor working directories. An exported package is meant to be
+# committed -- to its own repository, not to this one -- so the default export
+# destination is ignored here rather than tracked by accident.
+scenario_drafts/
+scenario_packages/
