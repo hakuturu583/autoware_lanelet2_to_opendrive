@@ -1,0 +1,32 @@
+# @package _global_
+# Concrete Odaiba outbound closed-loop scenario (Miraikan -> Aomi), driven by
+# Autoware (ego.entity=autoware_ego). Selecting this scenario also switches the
+# map group to Odaiba, so `scenario=odaiba_outbound/default` is self-contained --
+# which is what the interface node's `with_scenario:=<image>#odaiba_outbound/default`
+# passes.
+defaults:
+  - override /map: odaiba
+
+scenario:
+  name: odaiba_outbound
+  # Pass when the ego enters a box around the goal centerline point (Aomi).
+  # Expressed in Lanelet2 coordinates so the pass check needs no OpenDRIVE road network.
+  goal_lanelet_id: 175965
+  goal_s: 50.29
+  goal_box_half_length: 5.0
+  goal_box_half_width: 3.0
+  # Fail-safe: the outbound route is long; give the closed loop headroom.
+  timeout_seconds: 900.0
+
+ego:
+  # Closed loop: host the AutowareBridge server and wait for Autoware to route,
+  # engage, and drive (see the bridge group for the server address).
+  entity: autoware_ego
+  initial_speed_kmh: 0.0
+  # Spawn: Miraikan (science museum) -- lanelet resolved from the trajectory start.
+  spawn_lanelet_id: 190757
+  spawn_s: 35.43
+  # Goal: Aomi -- Autoware routes here. Matches run_odaiba_outbound.sh's published
+  # goal map(89403.6, 43172.3), yaw 33 deg.
+  goal_lanelet_id: 175965
+  goal_s: 50.29
