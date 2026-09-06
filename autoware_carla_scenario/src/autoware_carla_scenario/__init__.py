@@ -120,6 +120,7 @@ if TYPE_CHECKING:
         MapManager as MapManager,
         OpenDrivePose as OpenDrivePose,
         frame_of as frame_of,
+        get_stop_line_linestrings as get_stop_line_linestrings,
         get_stop_line_poses as get_stop_line_poses,
         get_stop_line_poses_with_following as get_stop_line_poses_with_following,
         snap_to_carla_road as snap_to_carla_road,
@@ -200,7 +201,6 @@ if TYPE_CHECKING:
     from .server import CarlaServerManager as CarlaServerManager
     from .utils import (
         find_nearest_traffic_light as find_nearest_traffic_light,
-        get_stop_line_linestrings as get_stop_line_linestrings,
         lanelet2_traffic_light_id_to_opendrive_controller_id as lanelet2_traffic_light_id_to_opendrive_controller_id,
     )
 
@@ -452,7 +452,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "EgoDriverGrpcClient": (".driver", "EgoDriverGrpcClient"),
     # utils
     "find_nearest_traffic_light": (".utils", "find_nearest_traffic_light"),
-    "get_stop_line_linestrings": (".utils", "get_stop_line_linestrings"),
+    "get_stop_line_linestrings": (".coordinate", "get_stop_line_linestrings"),
     "lanelet2_traffic_light_id_to_opendrive_controller_id": (
         ".utils",
         "lanelet2_traffic_light_id_to_opendrive_controller_id",

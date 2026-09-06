@@ -22,7 +22,12 @@ from .frames import CoordinateFrame, FrameMismatchError, frame_of
 from .map_manager import MapManager
 from .poses import AnyPose, CarlaWorldPose, Lanelet2Pose, OpenDrivePose
 from .snap import GroundProjectionConfig, snap_to_carla_road
-from .stop_line import get_stop_line_poses, get_stop_line_poses_with_following
+from .stop_line import (
+    get_stop_line_linestrings,
+    get_stop_line_linestrings_with_following,
+    get_stop_line_poses,
+    get_stop_line_poses_with_following,
+)
 from .transform import (
     project_onto_road,
     to_carla_location,
@@ -41,6 +46,8 @@ __all__ = [
     "OpenDrivePose",
     "MapManager",
     "frame_of",
+    "get_stop_line_linestrings",
+    "get_stop_line_linestrings_with_following",
     "get_stop_line_poses",
     "get_stop_line_poses_with_following",
     "project_onto_road",
