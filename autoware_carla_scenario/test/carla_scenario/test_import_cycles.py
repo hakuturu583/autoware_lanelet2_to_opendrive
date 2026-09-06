@@ -14,9 +14,11 @@ Each import runs in its own interpreter, because the check is about import
 
 from __future__ import annotations
 
+import ast
 import pkgutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -57,3 +59,40 @@ def test_the_sweeper_map_loader_imports_on_its_own() -> None:
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+class TestLayering:
+    """`utils` sits underneath `coordinate`, and the imports have to say so.
+
+    A cycle is only the symptom that shows up as an `ImportError`. The cause is
+    a leaf package reaching up into the one that imports it, and that reads as
+    fine right up until an entry point takes the other order -- so it is worth
+    checking directly rather than waiting for the traceback.
+    """
+
+    @staticmethod
+    def _imported_packages(module_path: Path) -> set[str]:
+        """Return the sibling packages *module_path* imports, at any depth."""
+        found: set[str] = set()
+        tree = ast.parse(module_path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.level and node.module:
+                found.add(node.module.split(".")[0])
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    parts = alias.name.split(".")
+                    if parts[0] == "autoware_carla_scenario" and len(parts) > 1:
+                        found.add(parts[1])
+        return found
+
+    def test_utils_does_not_import_coordinate(self) -> None:
+        utils = Path(autoware_carla_scenario.__file__).parent / "utils"
+        offenders = {
+            path.name: sorted(self._imported_packages(path))
+            for path in sorted(utils.glob("*.py"))
+            if "coordinate" in self._imported_packages(path)
+        }
+        assert not offenders, (
+            "utils must read what it is given, not fetch it from coordinate: "
+            f"{offenders}"
+        )
