@@ -3,12 +3,33 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional
 
-
-from ..coordinate.map_manager import MapManager
+if TYPE_CHECKING:
+    from ..coordinate.map_manager import MapManager as _MapManager
 
 logger = logging.getLogger(__name__)
+
+#: Bound on first use by :func:`_map_manager` rather than at import time.
+#:
+#: ``coordinate/__init__`` imports ``coordinate.stop_line``, which imports this
+#: module, so importing ``coordinate.map_manager`` back at module scope makes
+#: the two packages a cycle.  Whether it resolves depends on which package an
+#: entry point reaches first: ``import autoware_carla_scenario`` happens to take
+#: the benign order, and ``import autoware_carla_scenario.sweeper.map_loader``
+#: -- ``sweeper/__init__`` -> ``bindings`` -> ``utils/__init__`` -> here --
+#: takes the other one and fails outright.
+MapManager: Optional[type["_MapManager"]] = None
+
+
+def _map_manager() -> "_MapManager":
+    """Return the initialised :class:`MapManager`, importing it on first use."""
+    global MapManager  # noqa: PLW0603 -- memoises the deferred import
+    if MapManager is None:
+        from ..coordinate.map_manager import MapManager as _Imported  # noqa: PLC0415
+
+        MapManager = _Imported
+    return MapManager.get_instance()
 
 
 def _attr_get(attrs: Any, key: str) -> str | None:
@@ -112,7 +133,7 @@ def get_stop_line_linestrings(lanelet_id: int) -> list[Any]:
     Raises:
         ValueError: If the lanelet ID is not found in the map.
     """
-    mm = MapManager.get_instance()
+    mm = _map_manager()
     lanelet_map = mm.lanelet_map
 
     try:
@@ -145,7 +166,7 @@ def get_stop_line_linestrings_with_following(
     import lanelet2.routing
     import lanelet2.traffic_rules
 
-    mm = MapManager.get_instance()
+    mm = _map_manager()
     lanelet_map = mm.lanelet_map
 
     try:
