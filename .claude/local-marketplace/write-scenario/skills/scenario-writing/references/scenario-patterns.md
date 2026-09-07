@@ -74,9 +74,9 @@ def setup(self) -> None:
 # Verify ego passes through roads in order using sticky conditions
 sticky_conditions = [
     StickyCondition(
-        EntityLanePositionCondition(
-            entity_name=EGO_ROLE_NAME,
-            road_id=road_id,
+        EntityLanePositionCondition.anywhere_on_road(
+            EGO_ROLE_NAME,
+            road_id,
             label=f"ego_on_road_{road_id}",
         )
     )
