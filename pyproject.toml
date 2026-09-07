@@ -29,6 +29,8 @@ dev = [
     "pytest>=9.0.3",
     "pytest-testmon>=2.2.0",
     "pytest-xdist>=3.8.0",
+    # `ui/scanner.py` and `test_driver_config.py` read YAML, and without these
+    # stubs mypy reports both as untyped imports.
     "types-pyyaml>=6.0.12.20260815",
     "weasyprint>=68.0",
 ]
