@@ -5,7 +5,7 @@ A Python workspace for converting [Lanelet2](https://github.com/fzi-forschungsze
 The repository is a [`uv`](https://docs.astral.sh/uv/) workspace with two packages:
 
 - [`autoware_lanelet2_to_opendrive`](autoware_lanelet2_to_opendrive/) — the `convert` CLI that turns a Lanelet2 `.osm` map into an OpenDRIVE `.xodr` file, with optional Lanelet2 preprocessing, ASAM QC validation, and a CARLA-specific output overlay.
-- [`autoware_carla_scenario`](autoware_carla_scenario/) — a Hydra-driven scenario runner that loads the converted map into CARLA, drives an Autoware ego vehicle, evaluates pass/fail conditions, and records video/JSON results. Ships a FastAPI viewer for browsing runs.
+- [`autoware_carla_scenario`](autoware_carla_scenario/) — a Hydra-driven scenario runner that loads the converted map into CARLA, drives an Autoware ego vehicle, evaluates pass/fail conditions, and records video/JSON results. Ships a FastAPI viewer for browsing runs and a FastAPI editor for authoring scenarios and exporting them as reproducible packages.
 
 ## Repository layout
 
