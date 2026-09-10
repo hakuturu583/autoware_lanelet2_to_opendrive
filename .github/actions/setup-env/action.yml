@@ -44,6 +44,19 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
+    - name: Point uv at that interpreter
+      shell: bash
+      run: echo "UV_PYTHON=${{ inputs.python-version }}" >> "${GITHUB_ENV}"
+      # setup-python only puts an interpreter on PATH; uv does not look there.
+      # It reads the repository's .python-version, so without this every job
+      # ran on that one version and a matrix over interpreters tested nothing.
+      #
+      # It has to be the environment rather than 'uv sync --python': a later
+      # bare 'uv run' re-resolves against .python-version and would rebuild
+      # the environment at the wrong version, silently. Putting it in the job
+      # environment covers every uv invocation -- sync, run, build -- and an
+      # explicit '--python' still wins where a step needs a different one.
+
     - name: Install uv
       uses: astral-sh/setup-uv@v4
       with:
