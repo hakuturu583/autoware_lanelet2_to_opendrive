@@ -3,13 +3,21 @@
 The `openscenario_dsl_frontend` subpackage parses
 [ASAM OpenSCENARIO DSL](https://www.asam.net/standards/detail/openscenario-dsl/)
 (OSC2, `.osc`) sources with [py-osc2](https://github.com/PMSFIT/py-osc2) and
-**transpiles them into an installable
-[scenario package](tutorial.md)** for this framework.
+**transpiles them into an offline-installable
+[scenario wheelhouse](tutorial.md)** for this framework.
+
+A wheelhouse is a directory of wheels holding the scenario plus its entire
+dependency closure — the framework and the native `lanelet2` binding included.
+It installs into a clean virtual environment with **no `uv`, `git`, or network
+access**, using only `python3-venv` and `python3-pip`:
+
+```bash
+pip install --no-index --find-links <wheelhouse> <distribution-name>
+```
 
 The generated scenario code is ordinary `autoware_carla_scenario` scenario
 code — a [`BaseScenario`](api.md) subclass whose `setup()` registers the same
-actions and pass/fail conditions you would write by hand. It is meant to be
-committed, reviewed and edited, not treated as an opaque build artifact.
+actions and pass/fail conditions you would write by hand.
 
 ## Pipeline
 
@@ -18,7 +26,8 @@ committed, reviewed and edited, not treated as an opaque build artifact.
   → parser.parse_osc_file        # py-osc2 / ANTLR parse tree
   → extractor.extract_program    # syntax IR (OscProgram)
   → translator.translate_program        # semantic plans (ScenarioPlan per one_of variant)
-  → package_codegen.generate_package     # installable scenario package
+  → package_codegen.generate_package     # scenario package source
+  → wheelhouse.build_wheelhouse          # offline-installable wheelhouse
 ```
 
 The parse/extract/translate/codegen layers are pure Python and do **not** import
@@ -51,11 +60,11 @@ CARLA, so they run (and are tested) without a CARLA installation. Only the
 
 ## Command-line usage
 
-The subpackage installs an `osc-transpile` console script that generates an
-installable scenario package:
+The subpackage installs an `osc-transpile` console script that builds an
+offline-installable scenario wheelhouse:
 
 ```bash
-# Create ./<scenario>_package
+# Create ./<scenario>_package_wheelhouse
 osc-transpile intersection_passing.osc
 
 # Create it under out/, choosing the package name
@@ -65,35 +74,50 @@ osc-transpile intersection_passing.osc -o out/ --name my_pkg
 osc-transpile intersection_passing.osc --check
 ```
 
+!!! note "Building the wheelhouse needs a toolchain once"
+    Producing the wheelhouse compiles the native `lanelet2` binding from its git
+    source, so it needs network access and a build toolchain **at build time**
+    (run it in the project's Docker container — see [docker.md](docker.md) — if
+    the host cannot build it). The resulting wheelhouse itself installs offline.
+
 The package, scenario, class and config names default to the DSL `scenario`
 name. When that name is a generic placeholder (`top`, `main`, … — e.g.
 scenario_runner names its entry scenario `top`), the source `.osc` **filename**
 is used instead, so `change_lane.osc` yields `change_lane` / `ChangeLaneScenario`
 rather than `top`. Pass `--name` to override.
 
-## The generated scenario package
+## The generated scenario wheelhouse
 
-The transpiler emits a standalone, installable **scenario package** — the
-layout introduced in `autoware_carla_scenario`:
+The transpiler generates the scenario package source (the layout introduced in
+`autoware_carla_scenario`) into a temporary directory, then builds it and its
+whole dependency closure into a **wheelhouse**:
 
 ```
-<scenario>_package/
-├── pyproject.toml                              # autoware_carla_scenario.scenarios entry point
-├── README.md
-└── src/<scenario>_package/
-    ├── __init__.py                             # register() → register_scenario(...) + register_conf_dir(...)
-    ├── <scenario>.py                           # the transpiled BaseScenario subclass(es)
-    ├── configs.py                              # config dataclass (name, timeout_seconds)
-    └── conf/scenario/<variant>/default.yaml    # concrete ego spawn / timeout per variant
+<scenario>_package_wheelhouse/
+├── <scenario>_package-0.1.0-py3-none-any.whl   # the transpiled scenario
+├── autoware_carla_scenario-…-py3-none-any.whl  # framework
+├── lanelet2_python_api_for_autoware-….whl      # native binding
+├── …                                           # the rest of the closure
+├── README.md                                   # offline install/run instructions
+└── install.sh                                  # one-shot offline installer
 ```
 
-Installing it makes the scenario runnable through the framework CLI without
-editing `autoware_carla_scenario`:
+The transpiled scenario module inside that wheel is ordinary framework code — a
+`BaseScenario` subclass whose `setup()` registers the ego spawn, manoeuvres and
+pass/fail conditions.
+
+Installing the wheelhouse makes the scenario runnable through the framework CLI
+without `uv`, `git`, or network access:
 
 ```bash
 osc-transpile junction_choice.osc -o .
-uv pip install -e junction_choice_package
-uv run scenario scenario=junction_choice_v0/default map=nishishinjuku
+
+python3 -m venv .venv && . .venv/bin/activate
+pip install --no-index --find-links junction_choice_package_wheelhouse \
+    junction-choice-package
+# or: (cd junction_choice_package_wheelhouse && ./install.sh)
+
+scenario scenario=junction_choice_v0/default map=nishishinjuku
 ```
 
 Each `one_of` variant is registered as its own scenario
@@ -107,11 +131,16 @@ manoeuvres and conditions are baked into the scenario class.
 
 ```python
 from autoware_carla_scenario.openscenario_dsl_frontend import (
+    transpile_to_wheelhouse,
     transpile_to_package,
     plans_from_file,
 )
 
-# Generate a full scenario package under out/.
+# Build an offline-installable wheelhouse under out/.
+wheelhouse = transpile_to_wheelhouse("intersection_passing.osc", output_dir="out")
+# pip install --no-index --find-links {wheelhouse} <distribution-name>
+
+# Or just write the editable package source tree (development, live workspace).
 root = transpile_to_package("intersection_passing.osc", output_dir="out")
 
 # Inspect the semantic plans (one per one_of variant) without generating code.

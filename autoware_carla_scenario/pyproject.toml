@@ -25,6 +25,9 @@ dependencies = [
     "pyyaml>=6.0",
     "pydantic>=2.0.0",
     "ffmpeg-python>=0.2.0",
+    # tomllib backport: the openscenario_dsl_frontend wheelhouse builder reads
+    # the workspace pyproject; tomllib is stdlib only on 3.11+, project is 3.10.
+    "tomli>=2.0.1; python_version < '3.11'",
 ]
 
 # NOTE: The openscenario_dsl_frontend subpackage uses `py-osc2` to parse
