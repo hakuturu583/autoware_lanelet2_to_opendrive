@@ -8,7 +8,7 @@ codified in the repo-root [`CLAUDE.md`](https://github.com/tier4/autoware_lanele
 
 ### Prerequisites
 
-- **Python 3.10 or newer** (the workspace lock is resolved for 3.10 — see
+- **Python 3.10 or newer** (the workspace lock covers 3.10 - 3.12 — see
   [Installation](installation.md) for the rationale)
 - **uv** 0.9.7 or newer
 - **Git**
@@ -122,8 +122,8 @@ uv run python -m autoware_lanelet2_to_opendrive.main \
 
 ### Coding standards
 
-- **Python 3.10** syntax and features only (the package is pinned to
-  `>=3.10,<3.11`).
+- **Python 3.10** syntax and features only: 3.10 is the floor of the
+  supported range (`>=3.10`), so anything newer would not run there.
 - Type hints on every public function and method (`py.typed` marker).
 - Google-style docstrings on public modules, classes, and functions.
 - Naming: `snake_case` for functions and variables, `PascalCase` for

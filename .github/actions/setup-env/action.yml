@@ -8,7 +8,10 @@ inputs:
   python-version:
     description: Python version to set up
     required: false
-    default: "3.10"
+    # Matches the repository's .python-version, so a job that does not care
+    # which interpreter it runs on gets the one contributors develop against.
+    # The 'test' job overrides it per matrix entry to cover the whole range.
+    default: "3.12"
   install-dev-deps:
     description: Run 'uv sync --dev' to install Python dependencies
     required: false

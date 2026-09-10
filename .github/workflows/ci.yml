@@ -8,13 +8,17 @@ on:
 
 jobs:
   test:
-    # The workspace is capped at Python 3.10 by the CARLA client wheel, not by
-    # anything of ours -- see 'converter-on-modern-python' below.
-    name: test (3.10, ${{ matrix.carla-extra }})
+    # The whole supported range, on both clients. The ceiling is the CARLA
+    # client and nothing else: 0.10.0 ships wheels up to cp312 (vendored in
+    # carla_wheels/) and 0.9.16 publishes up to cp312, so `requires-python`
+    # says `<3.13`. The floor is 3.10 because that is what Autoware's own
+    # environment is.
+    name: test (${{ matrix.python-version }}, ${{ matrix.carla-extra }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        python-version: ["3.10", "3.11", "3.12"]
         carla-extra: ["carla", "carla-0-9-16"]
 
     steps:
@@ -23,7 +27,7 @@ jobs:
     - name: Setup environment
       uses: ./.github/actions/setup-env
       with:
-        python-version: "3.10"
+        python-version: ${{ matrix.python-version }}
         install-dev-deps: "true"
         run-precommit: "false"
         carla-extra: ${{ matrix.carla-extra }}
@@ -37,11 +41,11 @@ jobs:
         uv build --package autoware-carla-scenario
 
   converter-on-modern-python:
-    # autoware-lanelet2-to-opendrive declares 'requires-python >= 3.10' and now
-    # installs entirely from wheels; only autoware-carla-scenario is still held
-    # at 3.10, by the cp310-only CARLA client. This job converts a fixture map
-    # with nothing but 'pip install .' on newer interpreters, so that claim
-    # cannot quietly stop being true.
+    # A different guarantee from the 'test' job above, which runs the workspace
+    # through uv: autoware-lanelet2-to-opendrive declares 'requires-python
+    # >= 3.10' with no ceiling and installs entirely from wheels, so this job
+    # converts a fixture map with nothing but 'pip install .' -- no uv, no
+    # lockfile -- and would catch the day that stops being true.
     #
     # 3.13 is left out on purpose: asam-qc-opendrive caps numpy below 2.0, and
     # numpy 1.26 has no cp313 wheel, so a 3.13 install compiles numpy from
