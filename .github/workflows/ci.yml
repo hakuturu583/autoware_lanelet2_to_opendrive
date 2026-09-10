@@ -32,8 +32,53 @@ jobs:
         run-precommit: "false"
         carla-extra: ${{ matrix.carla-extra }}
 
+    # The slow tests are the 'slow-tests' job below: four of them build a
+    # ~160 MB wheelhouse over the network and take longer than the other 1600
+    # put together, which is not something to do six times.
     - name: Run tests
-      run: uv run pytest -v --tb=short -n auto -o addopts=
+      run: uv run pytest -v --tb=short -n auto -o addopts= -m "not slow"
+
+  slow-tests:
+    # What the fast matrix leaves out: a real export, a real wheelhouse, and a
+    # real 'pip install --no-index' of it. Interpreter-sensitive -- a wheelhouse
+    # is built for one interpreter -- so it runs across the range; not
+    # client-sensitive beyond which wheel gets vendored, which the fast tests
+    # already assert, so it runs on one.
+    name: slow tests (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup environment
+      uses: ./.github/actions/setup-env
+      with:
+        python-version: ${{ matrix.python-version }}
+        install-dev-deps: "true"
+        run-precommit: "false"
+        carla-extra: "carla"
+
+    - name: Run the slow tests
+      run: uv run pytest -v --tb=short -o addopts= -m slow
+
+  build:
+    # Both packages build to 'py3-none-any' with uv_build, so the artifact
+    # depends on neither the interpreter nor the CARLA extra. Building it in
+    # every matrix leg reported one break as six red jobs.
+    name: build both packages
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup environment
+      uses: ./.github/actions/setup-env
+      with:
+        install-dev-deps: "true"
+        run-precommit: "false"
 
     - name: Check package can be built
       run: |
@@ -262,7 +307,6 @@ jobs:
     - name: Setup environment
       uses: ./.github/actions/setup-env
       with:
-        python-version: "3.10"
         install-dev-deps: "true"
         # The job only runs one console script; the dev group (mkdocs,
         # weasyprint, mypy, ...) would be installed and never touched.

@@ -122,8 +122,8 @@ uv run python -m autoware_lanelet2_to_opendrive.main \
 
 ### Coding standards
 
-- **Python 3.10** syntax and features only: 3.10 is the floor of the
-  supported range (`>=3.10`), so anything newer would not run there.
+- **Python 3.10** syntax and features only -- 3.10 is the floor of the
+  supported range.
 - Type hints on every public function and method (`py.typed` marker).
 - Google-style docstrings on public modules, classes, and functions.
 - Naming: `snake_case` for functions and variables, `PascalCase` for

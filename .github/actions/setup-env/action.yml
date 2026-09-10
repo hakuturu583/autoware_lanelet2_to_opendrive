@@ -55,6 +55,12 @@ runs:
         # save fails the job with 'Cache path ... does not exist on disk'.
         enable-cache: ${{ inputs.install-dev-deps }}
         cache-dependency-glob: "**/uv.lock"
+        # setup-uv keys the cache on the lockfile hash and nothing else, so
+        # without this every job in a matrix computes the same key: one save
+        # wins and the rest restore a cache full of another interpreter's
+        # wheels, then re-download most of the closure. uv's cache is per wheel
+        # tag, so the interpreter is the part that has to be in the key.
+        cache-suffix: ${{ inputs.python-version }}-${{ inputs.carla-extra }}
 
     - name: Install Python dependencies
       if: inputs.install-dev-deps == 'true'

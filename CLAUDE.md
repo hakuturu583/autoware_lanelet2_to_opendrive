@@ -220,13 +220,13 @@ If pre-commit hooks fail:
 
 - **simple-lanelet2** (>=1.1.2) - Provides `lanelet2` and
   `autoware_lanelet2_extension_python` as a single prebuilt wheel
-- Python 3.10 through 3.12. The ceiling is the CARLA client and nothing else:
-  0.10.0 is not published to PyPI and the wheels it ships (vendored in
-  `carla_wheels/`, taken from the Linux shipping package) stop at cp312, as do
-  0.9.16's on PyPI. `autoware_carla_scenario` therefore declares
-  `requires-python = ">=3.10,<3.13"`; the converter package has no ceiling of
-  its own and declares `">=3.10"`. The workspace lock covers the whole range,
-  and CI runs the suite on 3.10, 3.11 and 3.12 against both clients
+- Python 3.10 through 3.12. `autoware_carla_scenario` declares
+  `requires-python = ">=3.10,<3.13"`, capped by the CARLA client and nothing
+  else -- the comment on that line is the canonical explanation, and
+  `test_the_vendored_wheels_cover_the_declared_python_range` checks the range
+  against `carla_wheels/`. The converter package has no ceiling of its own and
+  declares `">=3.10"`. The workspace lock covers the whole range, and CI runs
+  the suite on 3.10, 3.11 and 3.12 against both clients
 
 ## Architecture Notes
 
