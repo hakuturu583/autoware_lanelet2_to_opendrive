@@ -61,7 +61,9 @@ repos:
       # imports `autoware_lanelet2_to_opendrive`, so a change to the converter
       # runs *both* suites, while a change to the framework runs only its own.
       # The workspace's `pyproject.toml` and `uv.lock` move every dependency
-      # under both, so they run both too.
+      # under both, so they run both too, and `carla_wheels/` runs the
+      # framework's: `carla_wheels()` reads that directory, and a test asserts
+      # its interpreter tags cover the declared `requires-python`.
       #
       # `pass_filenames: false` because pytest is given the test directory
       # rather than the changed files: a change anywhere in a package can break
@@ -77,4 +79,4 @@ repos:
         entry: uv run pytest --no-testmon -m "not integration" autoware_carla_scenario/test
         language: system
         pass_filenames: false
-        files: '^(autoware_carla_scenario/|autoware_lanelet2_to_opendrive/|pyproject\.toml$|uv\.lock$)'
+        files: '^(autoware_carla_scenario/|autoware_lanelet2_to_opendrive/|carla_wheels/|pyproject\.toml$|uv\.lock$)'
