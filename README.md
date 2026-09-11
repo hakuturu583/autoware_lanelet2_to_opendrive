@@ -41,9 +41,10 @@ python -m venv .venv && .venv/bin/pip install ./autoware_lanelet2_to_opendrive
 
 Arguments are passed verbatim to the `convert` CLI ([Hydra](https://hydra.cc/) syntax).
 
-The converter runs on Python 3.10 and newer. `autoware_carla_scenario` is capped
-at 3.10 because the CARLA 0.10.0 client is only published as a cp310 wheel, so
-the workspace lock is resolved for 3.10.
+The converter runs on Python 3.10 and newer; `autoware_carla_scenario` is
+capped at 3.12 by the CARLA client (see the comment on `requires-python` in
+`autoware_carla_scenario/pyproject.toml` for why). The workspace lock covers
+3.10 - 3.12 and CI tests all three.
 
 ## Local development (uv)
 

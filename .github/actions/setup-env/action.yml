@@ -8,7 +8,10 @@ inputs:
   python-version:
     description: Python version to set up
     required: false
-    default: "3.10"
+    # Matches the repository's .python-version, so a job that does not care
+    # which interpreter it runs on gets the one contributors develop against.
+    # The 'test' job overrides it per matrix entry to cover the whole range.
+    default: "3.12"
   install-dev-deps:
     description: Run 'uv sync --dev' to install Python dependencies
     required: false
@@ -41,6 +44,19 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
+    - name: Point uv at that interpreter
+      shell: bash
+      run: echo "UV_PYTHON=${{ inputs.python-version }}" >> "${GITHUB_ENV}"
+      # setup-python only puts an interpreter on PATH; uv does not look there.
+      # It reads the repository's .python-version, so without this every job
+      # ran on that one version and a matrix over interpreters tested nothing.
+      #
+      # It has to be the environment rather than 'uv sync --python': a later
+      # bare 'uv run' re-resolves against .python-version and would rebuild
+      # the environment at the wrong version, silently. Putting it in the job
+      # environment covers every uv invocation -- sync, run, build -- and an
+      # explicit '--python' still wins where a step needs a different one.
+
     - name: Install uv
       uses: astral-sh/setup-uv@v4
       with:
@@ -52,6 +68,12 @@ runs:
         # save fails the job with 'Cache path ... does not exist on disk'.
         enable-cache: ${{ inputs.install-dev-deps }}
         cache-dependency-glob: "**/uv.lock"
+        # setup-uv keys the cache on the lockfile hash and nothing else, so
+        # without this every job in a matrix computes the same key: one save
+        # wins and the rest restore a cache full of another interpreter's
+        # wheels, then re-download most of the closure. uv's cache is per wheel
+        # tag, so the interpreter is the part that has to be in the key.
+        cache-suffix: ${{ inputs.python-version }}-${{ inputs.carla-extra }}
 
     - name: Install Python dependencies
       if: inputs.install-dev-deps == 'true'

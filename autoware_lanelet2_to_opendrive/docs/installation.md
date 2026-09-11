@@ -15,10 +15,10 @@ the dependency set.
 
 - **Python 3.10 or newer** — `requires-python = ">=3.10"` in `pyproject.toml`.
 
-The repository's `uv.lock` is resolved for 3.10 because the sibling
-`autoware_carla_scenario` package is capped there by the CARLA 0.10.0 client
-wheel, which is published for CPython 3.10 only. That cap does not apply when
-this package is installed on its own, and CI exercises it on 3.11 and 3.12.
+The repository's `uv.lock` covers 3.10 - 3.12: the sibling
+`autoware_carla_scenario` package is capped at 3.12 by the CARLA client, whose
+wheels stop at cp312. That cap does not apply when this package is installed on
+its own, and CI exercises it on 3.11 and 3.12 with a plain `pip install`.
 
 Python 3.13 works, but is not wheels-only yet: `asam-qc-opendrive` caps `numpy`
 below 2.0 and `numpy` 1.26 publishes no cp313 wheel, so a 3.13 install compiles
@@ -77,7 +77,7 @@ on that workspace member, not on this package; the bundled wheels live under
 `carla_wheels/`:
 
 ```bash
-# CARLA 0.10.0 (not published to PyPI; the cp310 wheel is vendored in-tree)
+# CARLA 0.10.0 (not published to PyPI; the cp310/cp311/cp312 wheels are vendored in-tree)
 uv sync --dev --extra carla
 
 # Or pin to CARLA 0.9.16 (mutually exclusive with `carla`)
