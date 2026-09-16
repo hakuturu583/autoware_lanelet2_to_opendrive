@@ -91,6 +91,32 @@ held back, because a seam nobody can find is not a seam.
 
 ## Phase B — SUMO
 
+Interface questions Phase A deliberately left open, raised by the Phase A
+review and to be settled with the first co-simulation backend rather than
+guessed at now:
+
+- **No failure channel out of `tick()`.** Requirement 3 wants a backend that dies
+  mid-run to end the scenario as a failure attributed to it, but `tick()` must
+  not raise. Add a `failed` / `health()` member, or a documented exception the
+  runner catches, when task 16 lands. Related: `ScenarioQueue.run_all` catches
+  bare `Exception` and retries, so a `TrafficBackendUnavailable` ("SUMO is not
+  installed") would today be retried `cooldown_max_retries` times — let that
+  error escape the retry loop.
+- **`adopt()` has no inverse.** An NPC destroyed mid-run, and `clear_entities()`
+  between queued scenarios, leave a backend publishing vehicles that no longer
+  exist. Either add `abandon(entity)` or keep the rule `base.py` now states —
+  `close()` forgets everything adopted.
+- **`adopt()`'s precondition is convention, not contract.** The ego is adopted
+  after its actor exists; an NPC is adopted wherever the scenario calls
+  `register_entity`. SUMO needs the CARLA actor id at adopt time, so make the
+  precondition explicit (or pass the actor) in task 16.
+- **Ownership is stated three times per entity.** `use_autopilot`, the
+  `change_lane` / `turn_at_junction` overrides on `AutowareEgoEntity` and
+  `CarlaDriverEntity`, and the runner's `skip_actor_ids`. One property on the
+  entity (`driven_by_traffic_backend`), recorded by `adopt()`, would let
+  `start()` build its own skip set and collapse the overrides — design.md's
+  Error Handling §6 already promises the ownership table.
+
 - [ ] 10. Optional dependency extra
   - File: `autoware_carla_scenario/pyproject.toml`
   - `[project.optional-dependencies] sumo = ["eclipse-sumo>=1.20", "traci>=1.20", "sumolib>=1.20"]`;
