@@ -22,6 +22,17 @@ Two phases matter and are kept strictly apart:
 Phase A is worth merging on its own: it is the part every future backend depends on, and
 it is verifiable by the existing test suite staying green.
 
+> **Status.** Phase A is implemented: `traffic/` holds the seam, the TrafficManager is one
+> backend behind it, `none` is a second, and `traffic=` in the Hydra config selects between
+> them.  What it looks like from the outside is documented in
+> [`autoware_carla_scenario/docs/traffic_backends.md`](../../../autoware_carla_scenario/docs/traffic_backends.md);
+> this document stays the design record, including for Phase B.  Two things were decided
+> differently once written, and the text below reflects what was built: `TrafficBackend` is
+> a plain base class with working defaults rather than an ABC, so a backend implements only
+> what it does; and a backend's own settings travel as an `options` mapping rather than as
+> a typed node per simulator in the shared config, so a third-party backend needs no edit
+> here.
+
 ## Steering Document Alignment
 
 ### Technical Standards (tech.md)
@@ -203,24 +214,31 @@ class TrafficContext:
     output_dir: Path
 
 
-class TrafficBackend(ABC):
-    name: ClassVar[str]
+class TrafficBackend:
+    """Every method has a working default, so a backend implements only what it does."""
+
+    name: ClassVar[str] = "unnamed"
 
     # Lifecycle -- mirrors the ego entity's hooks, called from ScenarioRunner
     def prepare(self, context: TrafficContext) -> None: ...
     def adopt(self, entity: Any) -> None: ...          # an authored NPC/ego joins the run
-    def start(self, world: Any) -> None: ...           # after warm-up, before the clock
+    def start(self, world: Any, *, skip_actor_ids: Collection[int] = ()) -> None: ...
     def tick(self, world: Any, elapsed: float) -> None: ...
     def close(self) -> None: ...
 
-    # Manoeuvre vocabulary -- what the entities delegate
-    def change_lane(self, entity: Any, direction: LaneChangeDirection) -> None: ...
-    def lane_change_finished(self, entity: Any) -> bool: ...
-    def turn_at_junction(self, entity: Any, direction: TurnDirection, **kw: Any) -> None: ...
+    # Manoeuvre vocabulary -- what the entities delegate.  `world` is passed because a
+    # backend resolves the intent against the road network.
+    def change_lane(self, entity: Any, world: Any, direction: LaneChangeDirection) -> None: ...
+    def lane_change_finished(self, entity: Any, world: Any) -> bool: ...
+    def turn_at_junction(self, entity: Any, world: Any, direction: TurnDirection, **kw: Any) -> None: ...
 
     # Reporting
     def describe(self) -> dict[str, Any]: ...          # backend name, seed, versions
 ```
+
+`NullTrafficBackend` (`traffic.backend=none`) is the whole of a backend that drives
+nothing, and the smallest proof that the seam is one: selecting it changes the run without
+changing a line of the runner.
 
 - **Dependencies:** none beyond the standard library and the enums currently in
   `entity/tm_driving.py`, which move here (`LaneChangeDirection`, `TurnDirection`) and are
@@ -290,32 +308,36 @@ class TrafficBackend(ABC):
 ### `entity/` changes
 
 - **Purpose:** entities stop knowing about TrafficManager.
-- **Change:** `TrafficManagerDriven` becomes `BackendDriven`, holding
-  `_traffic_backend` and delegating each manoeuvre to it.
-  `TrafficManagerDriven` stays as a deprecated subclass, and `set_client(client, tm_port)`
-  keeps working by constructing a `TrafficManagerBackend` on the spot — external scenario
-  packages call it, and `scenario_config.py`'s docstring promises them a stable API.
+- **Change:** the mixin is `BackendDriven` in `entity/backend_driven.py`, holding
+  `_traffic_backend` and delegating each manoeuvre to it; `entity/tm_driving.py` stays as
+  a re-exporting shim with `TrafficManagerDriven` as a deprecated subclass, so every
+  existing import keeps working.  `set_client(client, tm_port)` keeps working too: with no
+  backend injected, a manoeuvre resolves to a `TrafficManagerBackend` built on the spot,
+  which is what such an entity always meant — external scenario packages call it, and
+  `scenario_config.py`'s docstring promises them a stable API.  The lane-change
+  bookkeeping (`_lane_change_target`, `_lane_change_map`) stays on the entity: a backend is
+  shared by the whole run, and the entity is the one thing there is exactly one of per
+  manoeuvre.
 - **Reuses:** `entity/registry.py` for role-name lookup; the protocols `LaneChanging` and
   `TurningAtJunctions` are unchanged, which is why actions need no edit at all.
 
 ## Data Models
 
-### TrafficConfig (Hydra group `traffic`, in `scenario_config.py`)
+### TrafficConfig (Hydra group `traffic`, in `traffic/config.py`)
+
+One shared node says *which* backend drives the run; everything else is the backend's own
+and travels as a plain mapping, which is what keeps a third-party backend from needing a
+field in a dataclass this package owns.
 
 ```
 TrafficConfig
 - backend: str = "traffic_manager"        # registry name
-- traffic_manager: TrafficManagerBackendConfig
-- sumo: SumoBackendConfig
+- options: dict[str, Any] = {}            # the backend's own node, passed verbatim
 
-TrafficManagerBackendConfig
+TrafficManagerBackendConfig               # built from `options` by the backend
 - port: int = 8100                        # falls back to the legacy traffic_manager.port
-- hybrid_physics_mode: bool = False
-- hybrid_physics_radius_m: float = 70.0
-- global_percentage_speed_difference: float = 0.0
-- auto_lane_change: bool = True
 
-SumoBackendConfig
+SumoBackendConfig                         # Phase B, built from `options`
 - binary: str = "sumo"                    # "sumo-gui" to watch it
 - use_libsumo: bool = False               # in-process, faster, no GUI
 - net_path: str | None = None             # derived from the map's xodr when unset

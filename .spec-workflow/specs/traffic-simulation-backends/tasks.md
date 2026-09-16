@@ -5,9 +5,15 @@ today, from behind the new seam, and the existing test suite is the acceptance c
 It is mergeable on its own. Phase B (tasks 10-18) adds SUMO. Phase C (19-21) is
 documentation and CI.
 
+**Phase A is done.** The suite is green (the two `test_maps.py` git-pinning failures are
+pre-existing on `master` and unrelated), `ruff`, `ruff-format` and `mypy` pass, and
+`traffic=none` / `traffic.options.port=…` / the legacy `traffic_manager.port` all resolve
+through `build_traffic_backend`. Task 20's documentation was written with it rather than
+held back, because a seam nobody can find is not a seam.
+
 ## Phase A — the seam (no behaviour change)
 
-- [ ] 1. Define the backend contract
+- [x] 1. Define the backend contract
   - File: `autoware_carla_scenario/src/autoware_carla_scenario/traffic/base.py` (new)
   - `TrafficContext`, `TrafficBackend` (ABC), `TrafficBackendUnavailable`,
     `TrafficBackendError`; move `LaneChangeDirection` and `TurnDirection` here
@@ -16,7 +22,7 @@ documentation and CI.
   - _Leverage: `entity/tm_driving.py` (enums, protocols), `entity/ego.py` (lifecycle hook naming)_
   - _Requirements: 1.1, 1.3_
 
-- [ ] 2. Backend registry with entry-point discovery
+- [x] 2. Backend registry with entry-point discovery
   - File: `.../traffic/registry.py` (new)
   - `register_backend`, `get_backend_factory`, `available_backends`,
     `load_traffic_backend_plugins` over `autoware_carla_scenario.traffic_backends`
@@ -24,7 +30,7 @@ documentation and CI.
   - _Leverage: `registry.py` (same structure, same error style)_
   - _Requirements: 2.3, 2.4_
 
-- [ ] 3. Configuration dataclasses
+- [x] 3. Configuration dataclasses
   - Files: `.../traffic/config.py` (new), `.../scenario_config.py` (extend `__all__`)
   - `TrafficConfig`, `TrafficManagerBackendConfig`, `SumoBackendConfig`,
     `AmbientTrafficConfig`, each with a `from_mapping` that rejects unknown keys
@@ -33,7 +39,7 @@ documentation and CI.
   - _Leverage: `driver/base.py::_checked`, `scenario_config.py`_
   - _Requirements: 2.2, 5.4_
 
-- [ ] 4. TrafficManager backend
+- [x] 4. TrafficManager backend
   - File: `.../traffic/traffic_manager.py` (new)
   - Move the sync-mode + seed block (`scenario_runner.py:577-582`), the autopilot loop
     (`scenario_runner.py:646-657`), and the manoeuvre bodies and geometry helpers from
@@ -42,7 +48,7 @@ documentation and CI.
   - _Leverage: `entity/tm_driving.py` (moved verbatim), `constants.py::DEFAULT_TM_PORT`_
   - _Requirements: 1.1, 1.2_
 
-- [ ] 5. Entities delegate instead of calling the TrafficManager
+- [x] 5. Entities delegate instead of calling the TrafficManager
   - Files: `.../entity/tm_driving.py`, `.../entity/vehicle_entity.py`, `.../entity/ego.py`
   - `BackendDriven` mixin holding `_traffic_backend`; `TrafficManagerDriven` kept as a
     deprecated subclass whose `set_client()` builds a `TrafficManagerBackend`
@@ -50,7 +56,7 @@ documentation and CI.
   - _Leverage: existing `LaneChanging` / `TurningAtJunctions` protocols (unchanged, so no action edits)_
   - _Requirements: 1.1, 5.1_
 
-- [ ] 6. Runner drives the backend
+- [x] 6. Runner drives the backend
   - File: `.../scenario_runner.py`
   - Build `TrafficContext`, call `prepare()` before `setup()`, `start()` where the
     autopilot loop was, `tick()` beside `ego.on_tick()`, `close()` in the `finally` block
@@ -59,14 +65,14 @@ documentation and CI.
   - _Leverage: existing lifecycle ordering and `_release_vehicles` / `_hold_vehicles_still`_
   - _Requirements: 1.1, 1.4, 5.1_
 
-- [ ] 7. Scenario hands registered entities to the backend
+- [x] 7. Scenario hands registered entities to the backend
   - File: `.../scenario_base.py` (`register_entity`, `set_client`)
   - `entity.set_traffic_backend(backend)` alongside the existing `set_client`
   - Purpose: an authored NPC's intents reach whatever drives it
   - _Leverage: `entity/registry.py`_
   - _Requirements: 5.2_
 
-- [ ] 8. Hydra config group and CLI selection
+- [x] 8. Hydra config group and CLI selection
   - Files: `.../examples/conf/traffic/traffic_manager.yaml` (new),
     `.../examples/conf/config.yaml` (defaults list), `.../examples/run.py`
     (`build_traffic_backend`, mirroring `build_ego_entity`)
@@ -74,7 +80,7 @@ documentation and CI.
   - _Leverage: `examples/run.py::build_ego_entity`_
   - _Requirements: 2.1, 2.2, 2.3_
 
-- [ ] 9. Phase A tests
+- [x] 9. Phase A tests
   - Files: `test/carla_scenario/test_traffic_registry.py`,
     `test_traffic_backend_contract.py`, `test_traffic_manager_backend.py` (new)
   - Contract suite (lifecycle order, idempotent `close`, intents never raise), registry
@@ -159,11 +165,14 @@ documentation and CI.
   - Purpose: a result says what drove its traffic
   - _Requirements: 5.4_
 
-- [ ] 20. Documentation
+- [x] 20. Documentation
   - Files: `autoware_carla_scenario/docs/traffic_backends.md` (new),
-    `docs/architecture.md` (traffic section), `mkdocs.yml` (nav), both READMEs
-  - Follow `docs/driver_interface.md`'s shape: architecture, how to run, config table,
-    Python API, writing your own backend
+    `docs/architecture.md` (traffic section and lifecycle diagrams), `docs/api.md`,
+    `mkdocs.yml` (nav), the package README
+  - Follows `docs/driver_interface.md`'s shape: architecture, how to run, config table,
+    lifecycle table, Python API, writing your own backend
+  - Written with Phase A rather than held for Phase C: the seam is the deliverable, and
+    one nobody can find is not a seam
   - _Requirements: 2.4_
 
 - [ ] 21. CI
