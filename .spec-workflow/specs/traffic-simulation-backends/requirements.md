@@ -23,11 +23,16 @@ the runner.
 
 ## Alignment with Product Vision
 
-The workspace already converts Autoware's Lanelet2 maps into OpenDRIVE, the format SUMO's
-`netconvert` imports directly. The same `.xodr` that CARLA loads therefore also produces
-the SUMO network, which makes this feature a natural extension of the product rather than
-a parallel pipeline: one map, one scenario document, one result format, several traffic
-models.
+Every run in this workspace already names a Lanelet2 map — it is what the converter reads
+and what Autoware plans on — and
+[`lanelet2_to_sumo`](https://github.com/autowarefoundation/lanelet2_to_sumo) turns exactly
+that file into a SUMO network. So the traffic model reads the same road network as the
+stack under test rather than a second derivation of it, which makes this feature a natural
+extension of the product rather than a parallel pipeline: one map, one scenario document,
+one result format, several traffic models.
+
+A run that already has a `.net.xml` — hand-tuned, or produced by another toolchain — names
+it instead, so the converter is the default rather than a requirement.
 
 It also repeats a pattern the package has already settled on twice — the pluggable
 scenario registry (`registry.py`) and the swappable ego entity (`ego.entity` ∈
@@ -87,19 +92,44 @@ CARLA run, so that Autoware is tested against calibrated flow rather than script
 5. IF SUMO is not installed THEN selecting the backend SHALL fail with a message naming the
    optional dependency extra that provides it.
 
-### Requirement 4 — Network derived from the scenario's own map
+### Requirement 4 — Network derived from the scenario's own Lanelet2 map
 
-**User Story:** As a scenario author, I want the SUMO network to come from the map the
-scenario already names, so that I do not maintain a second map by hand.
+**User Story:** As a scenario author, I want the SUMO network to come from the Lanelet2 map
+the scenario already names, so that I do not maintain a second map by hand and the traffic
+model reads the same road network Autoware plans on.
 
 #### Acceptance Criteria
 
 1. WHEN a run selects SUMO and names no network file THEN the backend SHALL derive a
-   `.net.xml` from the same OpenDRIVE the CARLA world was loaded from.
-2. WHEN the derived network for an OpenDRIVE already exists in the map cache THEN it SHALL
-   be reused rather than regenerated.
-3. WHEN the OpenDRIVE changes THEN the derived network SHALL be regenerated.
-4. IF a run names an explicit `net_path` THEN that file SHALL be used verbatim.
+   `.net.xml` from the same Lanelet2 `.osm` the run was given, using
+   [`ll2sumo`](https://github.com/autowarefoundation/lanelet2_to_sumo).
+2. WHEN the derived network for a Lanelet2 map and a set of conversion options already
+   exists in the map cache THEN it SHALL be reused rather than regenerated.
+3. WHEN the Lanelet2 map or the conversion options change THEN the derived network SHALL be
+   regenerated.
+4. WHEN the network is generated THEN the Lanelet2 → SUMO signal mapping the converter
+   emits SHALL be kept with it, so that traffic-light synchronisation joins the two
+   simulators on Lanelet2 ids rather than on geometry.
+
+### Requirement 4b — A network the run supplies
+
+**User Story:** As a scenario author, I want to run against a `.net.xml` I already have —
+hand-tuned, produced by another toolchain, or generated once ahead of a sweep — so that the
+converter is a default rather than a requirement.
+
+#### Acceptance Criteria
+
+1. IF a run names an explicit `net_path` THEN that file SHALL be used verbatim, and no
+   conversion SHALL run.
+2. WHEN a run names an explicit `net_path` THEN the CARLA ↔ SUMO transform SHALL be derived
+   from that network's own `<location netOffset= projParameter=>` header, the same way it is
+   for a generated one.
+3. IF a supplied network's projection disagrees with the Lanelet2 map's THEN the run SHALL
+   fail at startup naming both, unless the config explicitly says to trust the network.
+4. IF a supplied network brings no signal mapping THEN the backend SHALL say once that
+   traffic lights are not synchronised, rather than silently running them unsynchronised.
+5. WHEN only a supplied network is used THEN the converter and its dependencies SHALL NOT
+   be required to be installed.
 
 ### Requirement 5 — One authority per vehicle and per traffic light
 

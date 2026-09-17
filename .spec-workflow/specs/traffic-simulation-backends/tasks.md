@@ -119,40 +119,65 @@ guessed at now:
 
 - [ ] 10. Optional dependency extra
   - File: `autoware_carla_scenario/pyproject.toml`
-  - `[project.optional-dependencies] sumo = ["eclipse-sumo>=1.20", "traci>=1.20", "sumolib>=1.20"]`;
+  - `[project.optional-dependencies] sumo = ["eclipse-sumo==1.26.0", "traci>=1.26",
+    "sumolib>=1.26", "ll2sumo @ git+https://github.com/autowarefoundation/lanelet2_to_sumo@<pinned-ref>"]`;
     lock with `uv lock`
-  - Purpose: SUMO arrives as a wheel, and only when asked for
-  - _Requirements: 3.5_
+  - `ll2sumo` is not on PyPI, so it is pinned by git ref; settle two things first — that a
+    git dependency is acceptable here (it cannot come from an index mirror), and the
+    upstream repository's licence, which has no `LICENSE` file at the time of writing
+  - Vendoring the converter, or asking upstream to publish it, are the alternatives if
+    either answer is no
+  - Purpose: SUMO and the converter arrive without a compiler, and only when asked for
+  - _Requirements: 3.5, 4.1_
 
-- [ ] 11. OpenDRIVE → SUMO network, cached
+- [ ] 11. The network in play: Lanelet2 → SUMO, cached, or the one the config names
   - File: `.../traffic/sumo/net.py` (new)
-  - `ensure_sumo_net(xodr, cache_dir, options)`; cache key = hash(xodr content + options);
-    `netconvert` stderr surfaced on failure
-  - Purpose: the scenario's own map becomes the SUMO network, once
-  - _Leverage: `maps/opendrive.py::ensure_xodr`, `maps/cache.py::GitMapCache.derived_dir`_
-  - _Requirements: 4.1, 4.2, 4.3, 4.4_
+  - `ensure_sumo_network(config, context) -> SumoNetwork`, covering both routes:
+    - **Route 1**: `ll2sumo.convert_map(input_path=context.lanelet2_path, out_dir=cache_dir,
+      lane_change_mode=..., signal_mode=...)`; cache key = hash(`.osm` content + options);
+      keep `net_path`, `signal_mapping_path` and the `randomtrips.safe.*` prefix it returns
+    - **Route 2**: `config.net_path` short-circuits conversion entirely — file used as it
+      sits, nothing cached, `ll2sumo` not even imported
+  - Both routes read `<location netOffset= projParameter=>` off the net with `sumolib`, so
+    the geo-reference is never assumed; a projection mismatch against the Lanelet2 map is an
+    error, an offset mismatch a warning, `trust_net_georeference` overrides
+  - A supplied net with no signal mapping logs the degradation once
+  - Purpose: one network, two honest ways to get it
+  - _Leverage: `maps.resolve_map_paths`, `maps/cache.py::GitMapCache.derived_dir`_
+  - _Requirements: 4.1, 4.2, 4.3, 4.4, 4b.1, 4b.2, 4b.3, 4b.4, 4b.5_
 
 - [ ] 12. Ambient demand generation
   - File: `.../traffic/sumo/demand.py` (new)
-  - `randomTrips.py` driven from `AmbientTrafficConfig`, seeded, cached beside the net;
-    an explicit `route_path` short-circuits it
-  - Purpose: reproducible flow without hand-written route files
+  - `randomTrips.py` driven from `AmbientTrafficConfig`, seeded, cached beside the net,
+    using `ll2sumo`'s `randomtrips.safe.*` weights (`--weights-prefix`) so disconnected and
+    dead-end edges are not used as sources or destinations; an explicit `route_path`
+    short-circuits it, and is required when the network came from `net_path`
+  - `randomTrips.py` is resolved from the SUMO tools directory
+    (`sumo.SUMO_HOME/tools` with the wheel installed, else `$SUMO_HOME/tools`)
+  - Purpose: reproducible flow without hand-written route files, and without jams
   - _Requirements: 3.4_
 
 - [ ] 13. Frame conversion CARLA ↔ SUMO
   - File: `.../coordinate/sumo.py` (new) or `traffic/sumo/frames.py`
-  - Conversion given the netconvert offset settings; round-trip property test
+  - Conversion built from the net's `<location>` header and the Lanelet2 map's projection,
+    which is the frame `MapManager` already holds; round-trip property test
   - Purpose: one place that knows the two frames differ
-  - _Leverage: `coordinate/transform.py`, `coordinate/poses.py`_
-  - _Requirements: 3.2, 3.3_
+  - _Leverage: `coordinate/transform.py`, `coordinate/poses.py`, `coordinate/map_manager.py`_
+  - _Requirements: 3.2, 3.3, 4b.2_
 
 - [ ] 14. The co-simulation loop
   - File: `.../traffic/sumo/sync.py` (new)
   - `TraciLike` / `WorldLike` protocols; `publish_owned`, `step`, `apply_to_carla`,
     `sync_traffic_lights`; TraCI subscriptions and CARLA batch commands, not per-vehicle calls
+  - Traffic lights join on Lanelet2 ids: read `lanelet_signal_to_sumo_links` from the
+    `signal_id_mapping.json` the network came with, and write each CARLA light's state to
+    its `tlLogic id + linkIndex` with `setRedYellowGreenState` (or the reverse under
+    `traffic_light_authority: sumo`).  No mapping — a supplied network without one — means
+    signals are left unsynchronised, said once
   - Purpose: the exchange, testable without either simulator
-  - _Leverage: `driver/base.py` (abstract-client-for-testability precedent), `coordinate/snap.py`_
-  - _Requirements: 3.1, 3.2, 3.3, 5.3_
+  - _Leverage: `driver/base.py` (abstract-client-for-testability precedent), `coordinate/snap.py`,
+    `coordinate/traffic_light.py` for the CARLA half of the same join_
+  - _Requirements: 3.1, 3.2, 3.3, 5.3, 4.4, 4b.4_
 
 - [ ] 15. Vehicle type mapping
   - Files: `.../traffic/sumo/types.py`, `.../traffic/sumo/vtypes.json` (new)
@@ -162,9 +187,11 @@ guessed at now:
 
 - [ ] 16. The SUMO backend
   - File: `.../traffic/sumo/backend.py` (new)
-  - Process lifecycle (`sumo` / `sumo-gui` / `libsumo`), `prepare` → net + demand + start,
-    `start` → publish CARLA-owned vehicles, `tick` → one step, `close` → destroy mirrored
-    actors and close TraCI; intents via `changeLane` / `setRoute`
+  - Process lifecycle (`sumo` / `sumo-gui` / `libsumo`), `prepare` → `ensure_sumo_network`
+    + demand + start, `start` → publish CARLA-owned vehicles, `tick` → one step, `close` →
+    destroy mirrored actors and close TraCI; intents via `changeLane` / `setRoute`
+  - The backend never builds a network itself: whichever route produced it, it receives a
+    `SumoNetwork` and starts SUMO on that
   - Purpose: the second backend
   - _Leverage: tasks 11-15; `server.py::CarlaServerManager` for subprocess lifecycle style_
   - _Requirements: 3.1, 3.2, 3.3, 3.5, 5.1_
@@ -177,11 +204,18 @@ guessed at now:
 - [ ] 18. Phase B tests
   - Files: `test/carla_scenario/test_sumo_net.py`, `test_sumo_sync.py`,
     `test_sumo_backend.py` (new)
-  - Fake TraCI and fake world; one `slow`-marked real-`netconvert` test on the
-    `nishishinjuku` fixture; the contract suite from task 9 parameterized over the SUMO backend
+  - Fake TraCI and fake world; the contract suite from task 9 parameterized over the SUMO
+    backend
+  - `test_sumo_net.py` covers both routes: Route 1 cache behaviour and conversion-failure
+    reporting with `ll2sumo` faked, Route 2 short-circuiting (the fake converter is never
+    called), header-derived transforms, projection mismatch refused, offset mismatch warned,
+    `trust_net_georeference` honoured, missing signal mapping degraded loudly
+  - One `slow`-marked test runs the real `ll2sumo` on the `nishishinjuku` fixture's `.osm`
+    and asserts the network parses with `sumolib`; its output is then the Route 2 input, so
+    one conversion covers both routes
   - Purpose: CI coverage without a CARLA or SUMO server
   - _Leverage: task 9's contract suite_
-  - _Requirements: 3.1, 3.2, 3.4, 4.1_
+  - _Requirements: 3.1, 3.2, 3.4, 4.1, 4.2, 4.3, 4b.1, 4b.2, 4b.3, 4b.4_
 
 ## Phase C — reporting, docs, CI
 
@@ -203,6 +237,7 @@ guessed at now:
 
 - [ ] 21. CI
   - File: `.github/workflows/*`
-  - Unit + fake-based tests on every PR; the `slow` `netconvert` test in the existing suite;
+  - Unit + fake-based tests on every PR; the `slow` `ll2sumo` conversion test in the
+    existing suite;
     the CARLA+SUMO end-to-end left to the manual/integration job
   - _Requirements: 3.1_
