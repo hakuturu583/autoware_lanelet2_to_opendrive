@@ -434,7 +434,8 @@ What the backend does with such a file, and what it does *not* assume:
 ### `entity/` changes
 
 - **Purpose:** entities stop knowing about TrafficManager.
-- **Change:** the mixin is `BackendDriven` in `entity/backend_driven.py`, holding
+- **Change:** the mixin is `BackendDriven` in `traffic/driven.py` -- the vehicle half of the
+  seam, beside the backend half rather than in `entity/` -- holding
   `_traffic_backend` and delegating each manoeuvre to it; `entity/tm_driving.py` stays as
   a re-exporting shim with `TrafficManagerDriven` as a deprecated subclass, so every
   existing import keeps working.  `set_client(client, tm_port)` keeps working too: with no
