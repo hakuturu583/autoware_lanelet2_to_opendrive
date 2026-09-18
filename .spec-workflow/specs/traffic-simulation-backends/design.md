@@ -283,8 +283,8 @@ changing a line of the runner.
   `prepare()` sets synchronous mode and seeds the TM (the block now at
   `scenario_runner.py:580`); `start()` runs the autopilot loop (now at
   `scenario_runner.py:651`), skipping actors it does not own; `tick()` is a no-op, because
-  the TM steps with the world; `change_lane` / `turn_at_junction` are the bodies now in
-  `TrafficManagerDriven`.
+  the TM steps with the world; `change_lane` / `turn_at_junction` are the bodies that were
+  in `entity/tm_driving.py`.
 - **Dependencies:** CARLA only.
 - **Reuses:** `compute_turn_route` and the lane-change completion test, moved not rewritten.
 
@@ -436,9 +436,12 @@ What the backend does with such a file, and what it does *not* assume:
 - **Purpose:** entities stop knowing about TrafficManager.
 - **Change:** the mixin is `BackendDriven` in `traffic/driven.py` -- the vehicle half of the
   seam, beside the backend half rather than in `entity/` -- holding
-  `_traffic_backend` and delegating each manoeuvre to it; `entity/tm_driving.py` stays as
-  a re-exporting shim with `TrafficManagerDriven` as a deprecated subclass, so every
-  existing import keeps working.  `set_client(client, tm_port)` keeps working too: with no
+  `_traffic_backend` and delegating each manoeuvre to it.  `entity/tm_driving.py` and its
+  deprecated `TrafficManagerDriven` subclass are deleted rather than kept as a shim: this
+  ships as a major version, so an import that moved is allowed to move.  The vocabulary it
+  re-exported (`LaneChangeDirection`, `TurnDirection`, `LaneChanging`,
+  `TurningAtJunctions`, `compute_turn_route`) is importable from `traffic` instead.
+  `set_client(client, tm_port)` keeps working: with no
   backend injected, a manoeuvre resolves to a `TrafficManagerBackend` built on the spot,
   which is what such an entity always meant — external scenario packages call it, and
   `scenario_config.py`'s docstring promises them a stable API.  The lane-change

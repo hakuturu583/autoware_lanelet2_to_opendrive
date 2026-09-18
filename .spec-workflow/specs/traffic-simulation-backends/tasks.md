@@ -49,9 +49,9 @@ held back, because a seam nobody can find is not a seam.
   - _Requirements: 1.1, 1.2_
 
 - [x] 5. Entities delegate instead of calling the TrafficManager
-  - Files: `.../entity/tm_driving.py`, `.../entity/vehicle_entity.py`, `.../entity/ego.py`
-  - `BackendDriven` mixin holding `_traffic_backend`; `TrafficManagerDriven` kept as a
-    deprecated subclass whose `set_client()` builds a `TrafficManagerBackend`
+  - Files: `.../traffic/driven.py`, `.../entity/vehicle_entity.py`, `.../entity/ego.py`
+  - `BackendDriven` mixin holding `_traffic_backend`, whose `set_client()` builds a
+    `TrafficManagerBackend`; `entity/tm_driving.py` and `TrafficManagerDriven` deleted
   - Purpose: an entity asks for an intent and does not know what performs it
   - _Leverage: existing `LaneChanging` / `TurningAtJunctions` protocols (unchanged, so no action edits)_
   - _Requirements: 1.1, 5.1_
@@ -86,7 +86,7 @@ held back, because a seam nobody can find is not a seam.
   - Contract suite (lifecycle order, idempotent `close`, intents never raise), registry
     errors, legacy `traffic_manager.port` fallback; existing suite must pass untouched
   - Purpose: prove the refactor changed nothing observable
-  - _Leverage: `test/carla_scenario/test_tm_driving.py`, `pytest_fixtures.py`_
+  - _Leverage: `test/carla_scenario/test_driven.py`, `pytest_fixtures.py`_
   - _Requirements: 1.2, 1.3, 2.2_
 
 ## Phase B — SUMO
