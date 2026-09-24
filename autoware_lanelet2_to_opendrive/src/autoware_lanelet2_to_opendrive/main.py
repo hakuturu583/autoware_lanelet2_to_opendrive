@@ -1255,15 +1255,7 @@ class _Lanelet2ToOpenDRIVEConverter:
             validate_road_link_symmetry,
         )
 
-        junction_road_ids = {
-            junction.id: {
-                road_id
-                for connection in junction.connections
-                for road_id in (connection.incoming_road, connection.connecting_road)
-            }
-            for junction in junctions
-        }
-        link_result = validate_road_link_symmetry(all_roads, junction_road_ids)
+        link_result = validate_road_link_symmetry(all_roads)
         if not link_result.is_valid:
             print(f"\nWARNING: {link_result.get_error_summary()}")
 

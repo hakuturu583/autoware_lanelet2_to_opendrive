@@ -247,10 +247,7 @@ ASYMMETRY_OTHER_ROAD = "the far road names a different road"
 ASYMMETRY_FOREIGN_JUNCTION = "the far road names a junction this road is not in"
 
 
-def validate_road_link_symmetry(
-    roads: List[Road],
-    junction_road_ids: "dict[int, set[int]] | None" = None,
-) -> RoadLinkReport:
+def validate_road_link_symmetry(roads: List[Road]) -> RoadLinkReport:
     """Return the road-to-road links only one of the two roads agrees with.
 
     A road-to-road link is a claim about a shared boundary, and both roads
@@ -261,8 +258,21 @@ def validate_road_link_symmetry(
     reported.  OpenDRIVE has a road adjoining a junction name the *junction*
     rather than the connecting road beyond it, so ``A.successor = B`` sitting
     opposite ``B.predecessor = junction 7`` is the standard idiom whenever A
-    is one of that junction's roads.  Only the links that no idiom explains
-    are returned, under one of three kinds:
+    is *inside* junction 7.  Membership is read off A's own
+    :attr:`~Road.junction`, which is the road's own statement of it: a
+    junction's ``incomingRoad`` approaches from outside and is not in the
+    junction, so reading a connection table instead would accept a genuine
+    asymmetry as the idiom.
+
+    Which end of the far road answers a claim comes from the claim's
+    ``contactPoint``, not from the side it was made on.  ``A.successor = B``
+    at ``contactPoint="start"`` is answered by ``B.predecessor``; the same
+    claim at ``contactPoint="end"`` meets B's far end and is answered by
+    ``B.successor``.  Assuming the first would report every link of the second
+    kind as missing.
+
+    Only the links that no idiom explains are returned, under one of three
+    kinds:
 
     * :data:`ASYMMETRY_MISSING` -- the far road says nothing on that end.
     * :data:`ASYMMETRY_OTHER_ROAD` -- it names a different road.  Two roads
@@ -270,45 +280,49 @@ def validate_road_link_symmetry(
       one predecessor and one successor, so the second claim has nowhere to go
       and the shared boundary needs a junction to hold both.
     * :data:`ASYMMETRY_FOREIGN_JUNCTION` -- it names a junction this road is
-      not part of, which is the same merge seen from the other side: a
+      not inside, which is the same merge seen from the other side: a
       junction took the slot and the road link was left stating something the
       map no longer agrees with.
 
     Args:
         roads: Every road in the converted map.
-        junction_road_ids: Junction id to the ids of the roads it connects,
-            used to recognise the idiom above.  Without it every junction
-            named opposite a road link is treated as foreign, so pass it
-            whenever the junctions are to hand.
 
     Returns:
         A :class:`RoadLinkReport`.
     """
-    junction_road_ids = junction_road_ids or {}
     by_id = {road.id: road for road in roads}
 
-    def stated(road: "Road | None", side: str) -> "tuple[str, int] | None":
-        """Return ``(element_type, element_id)`` stated on *side*, or None."""
+    def stated(road: "Road | None", side: str) -> "tuple[str, int, Any] | None":
+        """Return ``(element_type, element_id, contact_point)`` on *side*."""
         if road is None or road.link is None:
             return None
         element = getattr(road.link, side, None)
         if element is None:
             return None
-        return element.element_type.value, int(element.element_id)
+        return (
+            element.element_type.value,
+            int(element.element_id),
+            element.contact_point,
+        )
 
     asymmetries: List[RoadLinkAsymmetry] = []
     link_count = 0
 
     for road in roads:
-        for side, far_side in (
-            ("successor", "predecessor"),
-            ("predecessor", "successor"),
-        ):
+        for side in ("successor", "predecessor"):
             claim = stated(road, side)
             if claim is None or claim[0] != "road":
                 continue
             link_count += 1
             other_id = claim[1]
+            # The contact point names the end of the far road being met, and
+            # that end is the one whose own link answers this claim.
+            contact = claim[2]
+            far_side = (
+                "successor"
+                if contact is not None and contact.value == "end"
+                else "predecessor"
+            )
             far = stated(by_id.get(other_id), far_side)
 
             if far is None:
@@ -318,11 +332,11 @@ def validate_road_link_symmetry(
             elif far[0] == "road":
                 kind = ASYMMETRY_OTHER_ROAD
                 message = f"it names road {far[1]} there instead"
-            elif road.id in junction_road_ids.get(far[1], set()):
-                continue  # the standard idiom: this road is in that junction
+            elif road.junction == far[1]:
+                continue  # the standard idiom: this road is inside that junction
             else:
                 kind = ASYMMETRY_FOREIGN_JUNCTION
-                message = f"it names junction {far[1]}, which does not list this road"
+                message = f"it names junction {far[1]}, which this road is not in"
 
             asymmetries.append(
                 RoadLinkAsymmetry(

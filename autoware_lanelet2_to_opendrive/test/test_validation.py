@@ -255,8 +255,15 @@ def _linked_road(
     predecessor: "tuple[ElementType, int] | None" = None,
     successor: "tuple[ElementType, int] | None" = None,
     junction: int = -1,
+    predecessor_contact: "ContactPoint | None" = None,
+    successor_contact: "ContactPoint | None" = None,
 ) -> Road:
-    """Return a road stating the links given, and nothing else."""
+    """Return a road stating the links given, and nothing else.
+
+    The contact points default to the ordinary orientation -- a successor met
+    at the next road's start, a predecessor at the previous road's end -- and
+    are passed explicitly by the tests that need the other one.
+    """
     link = RoadLink()
     if predecessor is not None:
         element_type, element_id = predecessor
@@ -264,7 +271,9 @@ def _linked_road(
             element_type=element_type,
             element_id=element_id,
             contact_point=(
-                ContactPoint.END if element_type is ElementType.ROAD else None
+                (predecessor_contact or ContactPoint.END)
+                if element_type is ElementType.ROAD
+                else None
             ),
         )
     if successor is not None:
@@ -273,7 +282,9 @@ def _linked_road(
             element_type=element_type,
             element_id=element_id,
             contact_point=(
-                ContactPoint.START if element_type is ElementType.ROAD else None
+                (successor_contact or ContactPoint.START)
+                if element_type is ElementType.ROAD
+                else None
             ),
         )
     return Road(
@@ -318,7 +329,7 @@ class TestRoadLinkSymmetry:
             _linked_road(2, predecessor=(ElementType.JUNCTION, 7)),
         ]
 
-        report = validate_road_link_symmetry(roads, {7: {1}})
+        report = validate_road_link_symmetry(roads)
 
         assert report.is_valid
 
@@ -329,7 +340,7 @@ class TestRoadLinkSymmetry:
             _linked_road(2, predecessor=(ElementType.JUNCTION, 7)),
         ]
 
-        report = validate_road_link_symmetry(roads, {7: {3, 4}})
+        report = validate_road_link_symmetry(roads)
 
         assert not report.is_valid
         (found,) = report.asymmetries
@@ -389,6 +400,64 @@ class TestRoadLinkSymmetry:
 
         assert report.road_link_count == 0
         assert report.is_valid
+
+    def test_an_incoming_road_is_not_inside_the_junction_it_approaches(self) -> None:
+        """A junction's ``incomingRoad`` reaches it from outside.
+
+        Counting it as a member would accept a genuine asymmetry as the
+        standard idiom, which is the one way this check can go quiet about
+        something real.  Membership is the road's own ``junction``, which an
+        incoming road leaves at -1.
+        """
+        roads = [
+            _linked_road(1, successor=(ElementType.ROAD, 2), junction=-1),
+            _linked_road(2, predecessor=(ElementType.JUNCTION, 7)),
+        ]
+
+        report = validate_road_link_symmetry(roads)
+
+        (found,) = report.asymmetries
+        assert found.kind == ASYMMETRY_FOREIGN_JUNCTION
+
+    def test_a_link_met_at_the_far_road_s_end_is_answered_by_its_successor(
+        self,
+    ) -> None:
+        """``contactPoint`` names the end being met, and that end answers.
+
+        Two roads can meet end to end, and then the reciprocal of a successor
+        is another *successor*.  Reading the far road's predecessor regardless
+        would report every such link as missing -- a false report from the one
+        tool whose job is not to make them.
+        """
+        roads = [
+            _linked_road(
+                1,
+                successor=(ElementType.ROAD, 2),
+                successor_contact=ContactPoint.END,
+            ),
+            _linked_road(
+                2,
+                successor=(ElementType.ROAD, 1),
+                successor_contact=ContactPoint.END,
+            ),
+        ]
+
+        report = validate_road_link_symmetry(roads)
+
+        assert report.is_valid, report.get_error_summary()
+
+    def test_the_ordinary_orientation_is_still_answered_by_the_predecessor(
+        self,
+    ) -> None:
+        """The pairing above must not have moved the common case."""
+        roads = [
+            _linked_road(1, successor=(ElementType.ROAD, 2)),
+            _linked_road(2, successor=(ElementType.ROAD, 1)),
+        ]
+
+        report = validate_road_link_symmetry(roads)
+
+        assert not report.is_valid
 
     def test_the_summary_groups_by_shape_and_names_the_roads(self) -> None:
         """The summary is read in a conversion log, so it has to say which
