@@ -1244,6 +1244,29 @@ class _Lanelet2ToOpenDRIVEConverter:
         if not dup_result.is_valid:
             print(f"\nWARNING: {dup_result.get_error_summary()}")
 
+        # Step 6.9b: Validate that road-to-road links agree at both ends.
+        # A consumer walking the network reads it from whichever road it
+        # happens to start on, so a link only one of the two states is a
+        # topology that depends on the direction of travel.  Reported rather
+        # than raised: the shapes this finds are merges the single
+        # predecessor/successor slot cannot hold (see issue #68), which is a
+        # modelling gap rather than a reason to refuse the map.
+        from autoware_lanelet2_to_opendrive.opendrive.validation import (
+            validate_road_link_symmetry,
+        )
+
+        junction_road_ids = {
+            junction.id: {
+                road_id
+                for connection in junction.connections
+                for road_id in (connection.incoming_road, connection.connecting_road)
+            }
+            for junction in junctions
+        }
+        link_result = validate_road_link_symmetry(all_roads, junction_road_ids)
+        if not link_result.is_valid:
+            print(f"\nWARNING: {link_result.get_error_summary()}")
+
         # Step 6.9: Build parking lots (P2-1)
         # Runs AFTER crosswalk/stop-line extraction so the nearest-road
         # heuristics in those steps cannot accidentally bind to a synthetic
