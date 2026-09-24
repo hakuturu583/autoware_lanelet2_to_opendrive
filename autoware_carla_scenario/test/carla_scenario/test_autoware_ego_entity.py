@@ -341,10 +341,6 @@ class TestRouteTo:
 
         snapped = CarlaWorldPose(x=40.0, y=50.0, z=1.0, yaw=-90.0)
         monkeypatch.setattr(
-            "autoware_carla_scenario.coordinate.to_opendrive",
-            lambda pose: pose,
-        )
-        monkeypatch.setattr(
             "autoware_carla_scenario.coordinate.snap_to_carla_road",
             lambda pose, world, ground_projection: snapped,
         )
@@ -367,6 +363,44 @@ class TestRouteTo:
         assert goal is not None
         assert goal.position.x == pytest.approx(40.0)
         assert goal.position.y == pytest.approx(-50.0)
+
+    def test_the_goal_is_snapped_as_the_lanelet_pose_it_was_written_as(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The snap must see the Lanelet2 frame, or the goal faces the wrong way.
+
+        The snap reads a pose's heading off the frame it is handed: only the
+        Lanelet2 frame carries the lanelet's direction of travel, while the
+        OpenDRIVE one carries the road reference line's, which runs the other way
+        on a left-hand-traffic map converted from Lanelet2. Projecting the goal
+        to OpenDRIVE before snapping it therefore hands Autoware a goal facing
+        back down its lane, and its mission planner rejects it outright.
+        """
+        from autoware_carla_scenario.coordinate import (
+            CarlaWorldPose,
+            Lanelet2Pose,
+            OpenDrivePose,
+        )
+
+        seen: list[object] = []
+
+        def _snap(pose, world, ground_projection):
+            seen.append(pose)
+            return CarlaWorldPose(x=40.0, y=50.0, z=1.0, yaw=-90.0)
+
+        monkeypatch.setattr(
+            "autoware_carla_scenario.coordinate.snap_to_carla_road", _snap
+        )
+
+        entity = _make_entity()
+        world = _FakeWorld([_FakeActor(1, str(EGO_ROLE_NAME))])
+        entity.spawn(world, config=None)  # type: ignore[arg-type]
+
+        goal = Lanelet2Pose(lanelet_id=175965, s=47.0)
+        entity.route_to(world, goal)
+
+        assert seen == [goal]
+        assert not any(isinstance(pose, OpenDrivePose) for pose in seen)
 
     def test_an_entity_that_plans_nothing_ignores_a_goal(self) -> None:
         """The base no-op is what makes a routing card safe to draw anywhere."""
