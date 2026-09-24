@@ -287,8 +287,12 @@ class BaseScenario(ABC):
         ll2_pose = self._spawn_pose
         od_pose = to_opendrive(ll2_pose)
         world = self.world
+        # Snap the Lanelet2 pose, not the OpenDRIVE one derived from it: the
+        # snap takes a pose's heading from the frame it was given in, and the
+        # lanelet is the frame this spawn was named in. Passing od_pose here
+        # would hand back the OpenDRIVE reference line's direction instead.
         snapped = snap_to_carla_road(
-            od_pose, world, ground_projection=self._ground_projection
+            ll2_pose, world, ground_projection=self._ground_projection
         )
 
         logger.info(
