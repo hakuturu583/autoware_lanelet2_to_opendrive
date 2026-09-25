@@ -39,6 +39,7 @@ from .lane_change_settled import LaneChangeSettledCondition
 from .sticky import StickyCondition
 from .timeout import TimeoutCondition
 from .traffic_signal import TrafficSignalCondition
+from .traffic_signal_controller import TrafficSignalControllerCondition
 
 __all__ = [
     "AccelerationCondition",
@@ -77,6 +78,7 @@ __all__ = [
     "WaypointCheckType",
     "WaypointCondition",
     "TrafficSignalCondition",
+    "TrafficSignalControllerCondition",
     "find_actor_by_role_name",
     "find_actor_in_list",
 ]

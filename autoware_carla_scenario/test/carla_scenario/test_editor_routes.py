@@ -1373,7 +1373,11 @@ class TestEnvironmentTrack:
             assert actor is not None
             offers[actor.group(1)] = set(re.findall(r'<option value="([^"]+)"', form))
         assert offers["ego"] == {"lane_change", "routing", "set_speed", "turn"}
-        assert offers[""] == {"environment", "traffic_signal"}
+        assert offers[""] == {
+            "environment",
+            "traffic_signal",
+            "traffic_signal_controller",
+        }
 
     def test_a_pedestrian_track_offers_walking_and_nothing_else(
         self, client: TestClient, draft_id: str

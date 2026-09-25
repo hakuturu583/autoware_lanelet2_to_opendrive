@@ -1030,6 +1030,49 @@ register_action_spec(
 # Built-in conditions -- compositions
 # ---------------------------------------------------------------------------
 
+register_action_spec(
+    ActionSpec(
+        type_id="traffic_signal_controller",
+        title="Set Junction Phase",
+        category="Environment",
+        builder="build_traffic_signal_controller_action",
+        target="..actions:TrafficSignalControllerAction",
+        scope="environment",
+        visual_kind="instant",
+        default_phase="init",
+        fields=(
+            FieldSpec(
+                name="controller",
+                label="Controller",
+                kind="text",
+                default="",
+                help=(
+                    "A controller declared on the map.  Its phases, and how "
+                    "long each holds, are declared there too -- a junction's "
+                    "cycle belongs to the road rather than to one scenario."
+                ),
+            ),
+            FieldSpec(
+                name="phase",
+                label="Phase",
+                kind="text",
+                default="",
+                help=(
+                    "Which of that controller's phases to show.  The cycle "
+                    "carries on from it, so this starts the junction at a "
+                    "point rather than holding it there."
+                ),
+            ),
+        ),
+        description=(
+            "Jump a junction's controller to one of the phases its map "
+            "declares.  A phase names every signal the controller drives, so "
+            "the junction goes to a consistent state rather than one light at "
+            "a time."
+        ),
+    )
+)
+
 register_condition_spec(
     ConditionSpec(
         type_id="all",
@@ -1973,6 +2016,44 @@ register_condition_spec(
             ),
         ),
         description="A traffic light is in the expected state.",
+    )
+)
+
+register_condition_spec(
+    ConditionSpec(
+        type_id="traffic_signal_controller",
+        title="Junction phase",
+        category="World",
+        builder="build_traffic_signal_controller_condition",
+        target="..conditions:TrafficSignalControllerCondition",
+        visual=ConditionVisual(
+            metric="Junction phase",
+            target="controller",
+            target_prefix="Controller",
+            value="phase",
+            value_label="shows",
+        ),
+        fields=(
+            FieldSpec(
+                name="controller",
+                label="Controller",
+                kind="text",
+                default="",
+                help="A controller declared on the map.",
+            ),
+            FieldSpec(
+                name="phase",
+                label="Phase",
+                kind="text",
+                default="",
+                help=(
+                    "Passes while that phase is the one showing.  Read off the "
+                    'controller rather than off the lights, so it means "this '
+                    'phase is running" and not "something set these colours".'
+                ),
+            ),
+        ),
+        description=("The junction's controller is showing a named phase."),
     )
 )
 

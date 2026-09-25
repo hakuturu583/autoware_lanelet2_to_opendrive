@@ -350,6 +350,7 @@ classDiagram
     class CollisionCondition
     class EntityExistenceCondition
     class TrafficSignalCondition
+    class TrafficSignalControllerCondition
 
     class EntityLanePositionCondition
     class EntityDistanceCondition
@@ -375,6 +376,7 @@ classDiagram
     BaseCondition <|-- CollisionCondition
     BaseCondition <|-- EntityExistenceCondition
     BaseCondition <|-- TrafficSignalCondition
+    BaseCondition <|-- TrafficSignalControllerCondition
     BaseCondition <|-- EntityLanePositionCondition
     BaseCondition <|-- EntityDistanceCondition
     BaseCondition <|-- EntityPositionDistanceCondition
@@ -405,7 +407,7 @@ classDiagram
 | **Position** | `EntityLanePositionCondition`, `WaypointCondition` | Road/lane position, waypoint crossing |
 | **Relative** | `EntityDistanceCondition`, `EntityPositionDistanceCondition`, `TimeToCollisionCondition`, `TimeHeadwayCondition`, `RelativeSpeedCondition` | Gap to another entity or to a place on the map, time to collision, following headway and speed difference |
 | **Motion** | `SpeedCondition`, `AccelerationCondition`, `StandstillCondition`, `TemporaryStopCondition` | Speed and acceleration thresholds, standstill detection, stop-and-go |
-| **Traffic** | `TrafficSignalCondition` | Traffic light state checks |
+| **Traffic** | `TrafficSignalCondition`, `TrafficSignalControllerCondition` | One light's state, or a whole junction's phase |
 | **Composition** | `AndCondition`, `OrCondition`, `NotCondition` | Logical combinators |
 | **Stateful** | `StickyCondition`, `PersistentCondition` | Latch once satisfied / persist across ticks |
 | **Utility** | `AlwaysTrueCondition` | Unconditional trigger (default for actions) |
@@ -449,6 +451,7 @@ classDiagram
     }
 
     class TrafficSignalAction
+    class TrafficSignalControllerAction
     class EnvironmentAction
     class TurnAction
     class WalkStraightAction
@@ -457,6 +460,7 @@ classDiagram
     class SetSpeedAction
 
     BaseAction <|-- TrafficSignalAction
+    BaseAction <|-- TrafficSignalControllerAction
     BaseAction <|-- EnvironmentAction
     BaseAction <|-- TurnAction
     BaseAction <|-- WalkStraightAction
@@ -518,6 +522,75 @@ to another *finishing* a manoeuvre rather than to the command having gone out
 **Tick timing:**
 
 Actions can be registered as **pre-tick** (before `world.tick()`) or **post-tick** (after `world.tick()`) via `BaseScenario.register_pre_tick()` / `register_post_tick()`.
+
+### Traffic signals: one light, or a junction's cycle
+
+Two pairs of primitives, answering two different questions.
+
+`TrafficSignalAction` / `TrafficSignalCondition` set and read **one light**.
+That is enough to arrange a specific state and no more: a junction assembled a
+light at a time can be left with two conflicting approaches green, a state no
+real road reaches, and an amber has no name at all — it is just a colour one
+light happens to be showing.
+
+`TrafficSignalControllerAction` / `TrafficSignalControllerCondition` work in
+**phases**. A phase names every signal its controller drives and how long it
+holds, so showing one puts the whole junction into a known state at once, and
+waiting for one is a statement about the junction rather than about a colour.
+
+The phases themselves are not written in the storyboard. They are declared on
+the **map**, under `map.traffic_signal_controllers`, because a junction's cycle
+is a property of the road network — which is where OpenSCENARIO keeps it too
+(`RoadNetwork/TrafficSignals`), and where `scenario_simulator_v2` keeps it:
+
+```yaml
+map:
+  traffic_signal_controllers:
+    - name: crossing
+      phases:
+        - name: ns_green
+          duration_seconds: 20.0
+          states:
+            - {lanelet2_regulatory_element_id: 1001, state: green}
+            - {lanelet2_regulatory_element_id: 1002, state: red}
+        - name: ns_amber
+          duration_seconds: 3.0
+          states:
+            - {lanelet2_regulatory_element_id: 1001, state: yellow}
+            - {lanelet2_regulatory_element_id: 1002, state: red}
+        - name: all_red
+          duration_seconds: 1.0
+          states:
+            - {lanelet2_regulatory_element_id: 1001, state: red}
+            - {lanelet2_regulatory_element_id: 1002, state: red}
+    - name: next_junction
+      reference: crossing      # a green wave along a corridor is declared,
+      delay_seconds: 8.0       # not timed by a chain of actions
+      phases: [...]
+```
+
+`autoware_carla_scenario.signals` turns those declarations into running
+`SignalController` objects at scenario setup. Each is registered as a
+**pre-tick callback** and cycles on its own: a phase holds for its
+`duration_seconds` and then hands over to the next, looping. No runner change
+was needed — durations are differences, so the controller reads the world's own
+simulated elapsed seconds directly.
+
+The action **jumps** to a named phase and the cycle carries on from there, so a
+junction forced green does not thereby stay green; holding it is a separate
+decision, made by declaring a phase long enough to hold. The condition reads
+the phase off the **controller**, not off the lights: the controller is what
+decided them, so a junction that some other actor happened to set to the same
+colours does not read as that phase.
+
+A `reference` offsets one controller's start from another's, which is how a
+progressive system — a green wave — is written. The offsets are declared;
+nothing has to time them. The validator rejects a delay with no reference, a
+reference to a controller the map does not declare, a loop of them, duplicate
+controller or phase names, an unknown state, and any action or condition naming
+a controller or phase that does not exist — all while the document is being
+edited, because a misspelt phase name is invisible at runtime: the junction
+cycles normally and the scenario just waits forever.
 
 ---
 
