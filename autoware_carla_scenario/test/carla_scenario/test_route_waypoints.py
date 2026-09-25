@@ -69,6 +69,41 @@ class TestDerivingThemFromTheRoute:
 
         assert scenario.waypoint_poses == []
 
+    def test_the_last_lanelet_stays_when_the_goal_is_somewhere_else(self) -> None:
+        """A route's end is only the goal's when the goal says so.
+
+        `derive_goal_from_route` keeps a goal the config named rather than
+        overwriting it with the route's end.  When it did that, the route's last
+        lanelet is an ordinary stretch of the way there -- dropping it would let
+        Autoware reach the configured goal without ever driving it.
+        """
+        scenario = _scenario()
+        scenario.goal_pose = Lanelet2Pose(lanelet_id=44, s=0.0)
+
+        scenario.derive_waypoints_from_route([11, 22, 33])
+
+        assert [p.lanelet_id for p in scenario.waypoint_poses] == [11, 22, 33]
+
+    def test_the_last_lanelet_goes_when_it_is_the_goal(self) -> None:
+        """The ordinary case: routing to it is the point, so it is not a via."""
+        scenario = _scenario()
+        scenario.goal_pose = Lanelet2Pose(lanelet_id=33, s=0.0)
+
+        scenario.derive_waypoints_from_route([11, 22, 33])
+
+        assert [p.lanelet_id for p in scenario.waypoint_poses] == [11, 22]
+
+    def test_a_single_lanelet_route_is_a_way_there_when_the_goal_is_elsewhere(
+        self,
+    ) -> None:
+        """One named road is still a road the run was meant to take."""
+        scenario = _scenario()
+        scenario.goal_pose = Lanelet2Pose(lanelet_id=99, s=0.0)
+
+        scenario.derive_waypoints_from_route([42])
+
+        assert [p.lanelet_id for p in scenario.waypoint_poses] == [42]
+
 
 def _scenario():
     """A minimal concrete scenario; only its ego config is exercised here."""
@@ -109,9 +144,7 @@ def test_the_entity_snaps_each_waypoint_as_the_lanelet_pose_it_was_written_as(
         seen.append(pose)
         return CarlaWorldPose(x=float(len(seen)), y=0.0, z=0.0, yaw=0.0)
 
-    monkeypatch.setattr(
-        "autoware_carla_scenario.coordinate.snap_to_carla_road", _snap
-    )
+    monkeypatch.setattr("autoware_carla_scenario.coordinate.snap_to_carla_road", _snap)
     monkeypatch.setattr(
         "autoware_carla_scenario.entity.autoware_entity.to_map_frame",
         lambda p: BridgePose.from_yaw(p.x, p.y, p.z, math.radians(p.yaw)),

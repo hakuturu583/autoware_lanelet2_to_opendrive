@@ -337,6 +337,13 @@ def _apply_ego_config(cfg: DictConfig, scenario: BaseScenario) -> None:
     it may have derived.  The goal lands on the scenario's ego config --
     ``scenario.goal_pose`` reads and writes
     :attr:`~autoware_carla_scenario.EgoConfig.goal_pose`.
+
+    The way there travels with the goal, for the same reason and under the same
+    rule.  Leaving it behind would drop ``ego.waypoint_lanelet_ids`` silently on
+    this path, and a run that named its roads would be planned by whatever route
+    reached the goal soonest -- the shortcut waypoints exist to prevent.  An
+    empty list is "no particular way there was asked for", not "no way there",
+    so like a missing goal it leaves the scenario's own.
     """
     entity = build_ego_entity(cfg)
     if entity is not None:
@@ -345,6 +352,10 @@ def _apply_ego_config(cfg: DictConfig, scenario: BaseScenario) -> None:
     goal_pose = build_goal_pose(cfg)
     if goal_pose is not None:
         scenario.goal_pose = goal_pose
+
+    waypoint_poses = build_waypoint_poses(cfg)
+    if waypoint_poses:
+        scenario.waypoint_poses = waypoint_poses
 
 
 def run_scenario_with_queue(

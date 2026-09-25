@@ -413,20 +413,32 @@ class BaseScenario(ABC):
         A goal alone is planned for by the shortest way there, which is a
         different drive from the one a scenario that lists its lanelets meant.
         The listed lanelets become the waypoints, so the route follows them
-        instead of merely being checked against them afterwards; the last is
-        dropped, being the goal.
+        instead of merely being checked against them afterwards.
+
+        The route's last lanelet is dropped only when it is where the run ends.
+        That is the usual case -- :meth:`derive_goal_from_route` makes it the
+        goal, and a route with no goal yet implies the same -- and listing the
+        goal as a waypoint too would be redundant.  But that method deliberately
+        keeps a goal the config named somewhere else, and then the route's last
+        lanelet is an ordinary stretch of the way there: dropping it would let
+        Autoware reach the configured goal without ever driving it, which is the
+        shortcut this exists to prevent.
 
         Waypoints already named elsewhere win, and an empty route leaves them
         empty -- a run with no particular way there is a legitimate run.
 
         Call it from :meth:`setup` before :meth:`_setup_ego_spawn`, which is
-        where the mission is handed to an ego that plans its own route.
+        where the mission is handed to an ego that plans its own route.  Call it
+        after :meth:`derive_goal_from_route`, so the goal it compares against is
+        the one the run will use.
         """
-        if self.waypoint_poses or len(route_lanelet_ids) < 2:
+        if self.waypoint_poses or not route_lanelet_ids:
             return
+        goal = self.goal_pose
+        ends_at_the_goal = goal is None or goal.lanelet_id == route_lanelet_ids[-1]
+        via = route_lanelet_ids[:-1] if ends_at_the_goal else route_lanelet_ids
         self.waypoint_poses = [
-            Lanelet2Pose(lanelet_id=lanelet_id, s=0.0)
-            for lanelet_id in route_lanelet_ids[:-1]
+            Lanelet2Pose(lanelet_id=lanelet_id, s=0.0) for lanelet_id in via
         ]
 
     def register_route_to_goal(
