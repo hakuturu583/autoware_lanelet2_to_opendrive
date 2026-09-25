@@ -218,21 +218,31 @@ class AutowareEgoEntity(EgoVehicle):
         from ..coordinate import (  # noqa: PLC0415
             GroundProjectionConfig,
             snap_to_carla_road,
-            to_opendrive,
         )
 
+        # The goal is snapped as the Lanelet2 pose it was written as, not as its
+        # OpenDRIVE projection: the snap takes its heading from the frame it is
+        # given, and only the Lanelet2 frame carries the lanelet's direction of
+        # travel. On a left-hand-traffic map converted from Lanelet2 the road's
+        # reference line runs the other way, so a goal snapped as an OpenDRIVE
+        # pose faces back down its lane; the mission planner then measures the
+        # goal against its lanelet's angle, finds ~180 degrees against a 45
+        # degree threshold, and answers "Goal is not valid!" -- every route
+        # request comes back "The planned route is empty" and the scenario never
+        # becomes ready.
         snapped = snap_to_carla_road(
-            to_opendrive(goal),
+            goal,
             world,
             ground_projection=ground_projection or GroundProjectionConfig(),
         )
         logger.info(
-            "Routing to lanelet %d s=%.1f -> CARLA (%.1f, %.1f, %.1f)",
+            "Routing to lanelet %d s=%.1f -> CARLA (%.1f, %.1f, %.1f) yaw=%.1f",
             goal.lanelet_id,
             goal.s,
             snapped.x,
             snapped.y,
             snapped.z,
+            snapped.yaw,
         )
         self.set_mission(
             None if initial_pose is None else to_map_frame(initial_pose),

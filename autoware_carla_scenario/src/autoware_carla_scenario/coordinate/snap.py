@@ -209,13 +209,24 @@ def _snap_lanelet2_via_opendrive(
         ground_projection=ground_projection,
     )
 
+    # Heading comes from the frame the pose was given in. The round-trip above
+    # exists to put the position on the road surface CARLA trusts, but it reads
+    # the direction of travel off the OpenDRIVE reference line, and on a
+    # left-hand-traffic map converted from Lanelet2 that disagrees with the
+    # lanelet: measured across ten lanelets of one Odaiba route, eight came back
+    # between 145 and 180 degrees away from their lanelet's own tangent, so the
+    # ego would spawn facing back down its lane. The lanelet is what the caller
+    # named, and `to_carla_world` of a Lanelet2Pose takes its heading from that
+    # lanelet's centreline, so the yaw is taken from there.
+    carla_from_lanelet = to_carla_world(pose)
+
     result = CarlaWorldPose(
         x=carla_from_od.x,
         y=carla_from_od.y,
         z=refined_z,
         roll=carla_from_od.roll,
         pitch=carla_from_od.pitch,
-        yaw=carla_from_od.yaw,
+        yaw=carla_from_lanelet.yaw,
     )
 
     logger.debug(

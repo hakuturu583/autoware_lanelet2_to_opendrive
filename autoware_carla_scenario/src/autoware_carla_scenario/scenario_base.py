@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Callable, List, Optional, Sequence, Union
 
 if TYPE_CHECKING:
@@ -22,6 +22,7 @@ from .coordinate import (
     Lanelet2Pose,
     OpenDrivePose,
     snap_to_carla_road,
+    to_carla_world,
     to_opendrive,
 )
 from .entity._spawn import SpawnLocation, SpawnTransform
@@ -287,9 +288,19 @@ class BaseScenario(ABC):
         ll2_pose = self._spawn_pose
         od_pose = to_opendrive(ll2_pose)
         world = self.world
+        # Position from the OpenDRIVE pose: `get_waypoint_xodr` resolves
+        # (road, lane, s) against CARLA's own geometry, which names the surface
+        # unambiguously where a stacked road would otherwise be picked by
+        # proximity alone.
         snapped = snap_to_carla_road(
             od_pose, world, ground_projection=self._ground_projection
         )
+        # Heading from the lanelet, which is the frame this spawn was named in.
+        # The road's own direction disagrees with it on a left-hand-traffic map
+        # converted from Lanelet2 -- by about 180 degrees on most of one Odaiba
+        # route -- so taking the road's would spawn the ego facing back down its
+        # lane. Only the yaw is replaced; the waypoint's position stands.
+        snapped = replace(snapped, yaw=to_carla_world(ll2_pose).yaw)
 
         logger.info(
             "Lanelet %d -> OpenDRIVE road='%s' lane=%d s=%.1f -> "
