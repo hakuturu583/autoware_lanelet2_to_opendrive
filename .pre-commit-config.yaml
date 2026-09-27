@@ -65,6 +65,10 @@ repos:
       # framework's: `carla_wheels()` reads that directory, and a test asserts
       # its interpreter tags cover the declared `requires-python`.
       #
+      # The framework hook leaves out `slow` like CI's fast job does (CI runs them
+      # in their own job): the one export self-check that builds a wheelhouse
+      # took ~10 of a commit's ~10 minutes, the other ~1300 tests seconds.
+      #
       # `pass_filenames: false` because pytest is given the test directory
       # rather than the changed files: a change anywhere in a package can break
       # any of its tests, not just a test file that happens to have been edited.
@@ -76,7 +80,7 @@ repos:
         files: '^(autoware_lanelet2_to_opendrive/|pyproject\.toml$|uv\.lock$)'
       - id: pytest-carla
         name: pytest (autoware_carla_scenario)
-        entry: uv run pytest --no-testmon -m "not integration" autoware_carla_scenario/test
+        entry: uv run pytest --no-testmon -m "not integration and not slow" autoware_carla_scenario/test
         language: system
         pass_filenames: false
         files: '^(autoware_carla_scenario/|autoware_lanelet2_to_opendrive/|carla_wheels/|pyproject\.toml$|uv\.lock$)'
