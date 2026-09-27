@@ -30,6 +30,7 @@ from __future__ import annotations
 import logging
 import math
 import time
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
@@ -140,6 +141,7 @@ class AutowareEgoEntity(EgoVehicle):
         self._bridge = bridge
         self._initial_pose = initial_pose
         self._goal_pose = goal_pose
+        self._waypoint_poses: tuple = ()
         self._configured: bool = False
         self._ready: bool = False
         self._ready_ticks: int = 0
@@ -150,7 +152,10 @@ class AutowareEgoEntity(EgoVehicle):
     # ------------------------------------------------------------------
 
     def set_mission(
-        self, initial_pose: Optional["BridgePose"], goal_pose: "BridgePose"
+        self,
+        initial_pose: Optional["BridgePose"],
+        goal_pose: "BridgePose",
+        waypoints: Sequence["BridgePose"] = (),
     ) -> None:
         """Set the mission before :meth:`on_scenario_start` hands it over.
 
@@ -176,9 +181,11 @@ class AutowareEgoEntity(EgoVehicle):
             initial_pose: Map-frame pose Autoware initializes localization at,
                 or ``None`` to take it from the attached ego actor.
             goal_pose: Map-frame goal pose Autoware plans the route to.
+            waypoints: Map-frame poses the route must pass through, in order.
         """
         self._initial_pose = initial_pose
         self._goal_pose = goal_pose
+        self._waypoint_poses = tuple(waypoints)
 
     def route_to(
         self,
@@ -187,6 +194,7 @@ class AutowareEgoEntity(EgoVehicle):
         *,
         initial_pose: Optional["CarlaWorldPose"] = None,
         ground_projection: Optional["GroundProjectionConfig"] = None,
+        waypoints: Sequence["Lanelet2Pose"] = (),
     ) -> None:
         """Send Autoware to *goal*: snap it, put it in the map frame, hand it over.
 
@@ -209,6 +217,10 @@ class AutowareEgoEntity(EgoVehicle):
                 reads the attached actor.
             ground_projection: Settings used to snap the goal to the road
                 surface.  Defaults to :class:`GroundProjectionConfig`.
+            waypoints: Lanelet2 poses the route must pass through, in order.
+                Snapped exactly as the goal is, and for the same reason: they are
+                what the scenario author wrote, and Autoware needs map-frame poses
+                on the road it will actually drive.
         """
         from ..coordinate import (  # noqa: PLC0415
             GroundProjectionConfig,
@@ -225,23 +237,28 @@ class AutowareEgoEntity(EgoVehicle):
         # degree threshold, and answers "Goal is not valid!" -- every route
         # request comes back "The planned route is empty" and the scenario never
         # becomes ready.
-        snapped = snap_to_carla_road(
-            goal,
-            world,
-            ground_projection=ground_projection or GroundProjectionConfig(),
-        )
-        logger.info(
-            "Routing to lanelet %d s=%.1f -> CARLA (%.1f, %.1f, %.1f) yaw=%.1f",
-            goal.lanelet_id,
-            goal.s,
-            snapped.x,
-            snapped.y,
-            snapped.z,
-            snapped.yaw,
-        )
+        projection = ground_projection or GroundProjectionConfig()
+
+        def _snap(pose: "Lanelet2Pose", what: str) -> "CarlaWorldPose":
+            snapped = snap_to_carla_road(pose, world, ground_projection=projection)
+            logger.info(
+                "%s lanelet %d s=%.1f -> CARLA (%.1f, %.1f, %.1f) yaw=%.1f",
+                what,
+                pose.lanelet_id,
+                pose.s,
+                snapped.x,
+                snapped.y,
+                snapped.z,
+                snapped.yaw,
+            )
+            return snapped
+
+        snapped_waypoints = [_snap(pose, "Routing via") for pose in waypoints]
+        snapped_goal = _snap(goal, "Routing to")
         self.set_mission(
             None if initial_pose is None else to_map_frame(initial_pose),
-            to_map_frame(snapped),
+            to_map_frame(snapped_goal),
+            [to_map_frame(pose) for pose in snapped_waypoints],
         )
 
     # ------------------------------------------------------------------
@@ -401,7 +418,7 @@ class AutowareEgoEntity(EgoVehicle):
         # of scenarios is built before the first one runs, and two bridges
         # cannot hold the same address at once.
         self._bridge.start()
-        self._bridge.configure(initial_pose, self._goal_pose)
+        self._bridge.configure(initial_pose, self._goal_pose, self._waypoint_poses)
         self._configured = True
 
     def _resolve_initial_pose(self) -> "BridgePose":
