@@ -13,7 +13,11 @@ from autoware_lanelet2_to_opendrive.opendrive.road_links import (
 )
 from autoware_lanelet2_to_opendrive.opendrive.enums import ContactPoint, ElementType
 from autoware_lanelet2_to_opendrive.opendrive.validation import (
+    ASYMMETRY_FOREIGN_JUNCTION,
+    ASYMMETRY_MISSING,
+    ASYMMETRY_OTHER_ROAD,
     validate_lane_road_link_consistency,
+    validate_road_link_symmetry,
 )
 
 
@@ -238,3 +242,233 @@ class TestLaneRoadLinkConsistency:
 
         assert result.is_valid
         assert result.error_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Road link symmetry (issue #68)
+# ---------------------------------------------------------------------------
+
+
+def _linked_road(
+    road_id: int,
+    *,
+    predecessor: "tuple[ElementType, int] | None" = None,
+    successor: "tuple[ElementType, int] | None" = None,
+    junction: int = -1,
+    predecessor_contact: "ContactPoint | None" = None,
+    successor_contact: "ContactPoint | None" = None,
+) -> Road:
+    """Return a road stating the links given, and nothing else.
+
+    The contact points default to the ordinary orientation -- a successor met
+    at the next road's start, a predecessor at the previous road's end -- and
+    are passed explicitly by the tests that need the other one.
+    """
+    link = RoadLink()
+    if predecessor is not None:
+        element_type, element_id = predecessor
+        link.predecessor = Predecessor(
+            element_type=element_type,
+            element_id=element_id,
+            contact_point=(
+                (predecessor_contact or ContactPoint.END)
+                if element_type is ElementType.ROAD
+                else None
+            ),
+        )
+    if successor is not None:
+        element_type, element_id = successor
+        link.successor = Successor(
+            element_type=element_type,
+            element_id=element_id,
+            contact_point=(
+                (successor_contact or ContactPoint.START)
+                if element_type is ElementType.ROAD
+                else None
+            ),
+        )
+    return Road(
+        id=road_id,
+        name=f"test_road_{road_id}",
+        length=100.0,
+        junction=junction,
+        link=link,
+        lanes=None,
+    )
+
+
+class TestRoadLinkSymmetry:
+    """A link is a claim about a shared boundary, and both roads must make it.
+
+    A consumer walks the network from whichever road it happens to start on,
+    so a link only one of the two states is a topology that depends on the
+    direction of travel.
+    """
+
+    def test_a_link_both_roads_state_is_not_reported(self) -> None:
+        roads = [
+            _linked_road(1, successor=(ElementType.ROAD, 2)),
+            _linked_road(2, predecessor=(ElementType.ROAD, 1)),
+        ]
+
+        report = validate_road_link_symmetry(roads)
+
+        assert report.is_valid
+        assert report.road_link_count == 2
+        assert "agree at both ends" in report.get_error_summary()
+
+    def test_the_standard_junction_idiom_is_not_reported(self) -> None:
+        """A road adjoining a junction names the junction, not the road beyond.
+
+        This is how OpenDRIVE is written, so counting it as a fault would bury
+        the real ones -- on the project's fixture it is the large majority of
+        one-sided links.
+        """
+        roads = [
+            _linked_road(1, successor=(ElementType.ROAD, 2), junction=7),
+            _linked_road(2, predecessor=(ElementType.JUNCTION, 7)),
+        ]
+
+        report = validate_road_link_symmetry(roads)
+
+        assert report.is_valid
+
+    def test_a_junction_that_does_not_list_the_road_is_reported(self) -> None:
+        """The same shape, minus the thing that made it legitimate."""
+        roads = [
+            _linked_road(1, successor=(ElementType.ROAD, 2)),
+            _linked_road(2, predecessor=(ElementType.JUNCTION, 7)),
+        ]
+
+        report = validate_road_link_symmetry(roads)
+
+        assert not report.is_valid
+        (found,) = report.asymmetries
+        assert found.road_id == 1
+        assert found.side == "successor"
+        assert found.kind == ASYMMETRY_FOREIGN_JUNCTION
+
+    def test_two_roads_claiming_one_end_of_a_third_is_reported(self) -> None:
+        """A merge, which one predecessor slot cannot hold.
+
+        Roads 1 and 3 both run into road 2.  OpenDRIVE gives road 2 a single
+        predecessor, so whichever is written second replaces the first and the
+        other claim is left stating something the map no longer agrees with.
+        The boundary needs a junction to hold both.
+        """
+        roads = [
+            _linked_road(1, successor=(ElementType.ROAD, 2)),
+            _linked_road(2, predecessor=(ElementType.ROAD, 3)),
+            _linked_road(3, successor=(ElementType.ROAD, 2)),
+        ]
+
+        report = validate_road_link_symmetry(roads)
+
+        reported = {(a.road_id, a.kind) for a in report.asymmetries}
+        assert (1, ASYMMETRY_OTHER_ROAD) in reported
+
+    def test_a_far_road_stating_nothing_is_reported(self) -> None:
+        roads = [
+            _linked_road(1, successor=(ElementType.ROAD, 2)),
+            _linked_road(2),
+        ]
+
+        report = validate_road_link_symmetry(roads)
+
+        (found,) = report.asymmetries
+        assert found.kind == ASYMMETRY_MISSING
+
+    def test_a_link_naming_a_road_that_is_not_there_is_reported(self) -> None:
+        """A dangling id is the same fault as a contradicted one."""
+        report = validate_road_link_symmetry(
+            [_linked_road(1, successor=(ElementType.ROAD, 99))]
+        )
+
+        (found,) = report.asymmetries
+        assert found.other_road_id == 99
+        assert found.kind == ASYMMETRY_MISSING
+
+    def test_a_junction_link_is_not_itself_a_road_link(self) -> None:
+        """Only road-to-road claims are counted, so the denominator means
+        something."""
+        roads = [
+            _linked_road(1, successor=(ElementType.JUNCTION, 7)),
+            _linked_road(2, predecessor=(ElementType.JUNCTION, 7)),
+        ]
+
+        report = validate_road_link_symmetry(roads)
+
+        assert report.road_link_count == 0
+        assert report.is_valid
+
+    def test_an_incoming_road_is_not_inside_the_junction_it_approaches(self) -> None:
+        """A junction's ``incomingRoad`` reaches it from outside.
+
+        Counting it as a member would accept a genuine asymmetry as the
+        standard idiom, which is the one way this check can go quiet about
+        something real.  Membership is the road's own ``junction``, which an
+        incoming road leaves at -1.
+        """
+        roads = [
+            _linked_road(1, successor=(ElementType.ROAD, 2), junction=-1),
+            _linked_road(2, predecessor=(ElementType.JUNCTION, 7)),
+        ]
+
+        report = validate_road_link_symmetry(roads)
+
+        (found,) = report.asymmetries
+        assert found.kind == ASYMMETRY_FOREIGN_JUNCTION
+
+    def test_a_link_met_at_the_far_road_s_end_is_answered_by_its_successor(
+        self,
+    ) -> None:
+        """``contactPoint`` names the end being met, and that end answers.
+
+        Two roads can meet end to end, and then the reciprocal of a successor
+        is another *successor*.  Reading the far road's predecessor regardless
+        would report every such link as missing -- a false report from the one
+        tool whose job is not to make them.
+        """
+        roads = [
+            _linked_road(
+                1,
+                successor=(ElementType.ROAD, 2),
+                successor_contact=ContactPoint.END,
+            ),
+            _linked_road(
+                2,
+                successor=(ElementType.ROAD, 1),
+                successor_contact=ContactPoint.END,
+            ),
+        ]
+
+        report = validate_road_link_symmetry(roads)
+
+        assert report.is_valid, report.get_error_summary()
+
+    def test_the_ordinary_orientation_is_still_answered_by_the_predecessor(
+        self,
+    ) -> None:
+        """The pairing above must not have moved the common case."""
+        roads = [
+            _linked_road(1, successor=(ElementType.ROAD, 2)),
+            _linked_road(2, successor=(ElementType.ROAD, 1)),
+        ]
+
+        report = validate_road_link_symmetry(roads)
+
+        assert not report.is_valid
+
+    def test_the_summary_groups_by_shape_and_names_the_roads(self) -> None:
+        """The summary is read in a conversion log, so it has to say which
+        roads to look at without printing every one of them."""
+        roads = [
+            _linked_road(1, successor=(ElementType.ROAD, 2)),
+            _linked_road(2, predecessor=(ElementType.ROAD, 3)),
+            _linked_road(3, successor=(ElementType.ROAD, 2)),
+        ]
+
+        summary = validate_road_link_symmetry(roads).get_error_summary()
+
+        assert "road 1 successor 2" in summary
+        assert ASYMMETRY_OTHER_ROAD in summary
