@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, List, Optional, Sequence, Union
 
 if TYPE_CHECKING:
@@ -22,7 +22,6 @@ from .coordinate import (
     Lanelet2Pose,
     OpenDrivePose,
     snap_to_carla_road,
-    to_carla_world,
     to_opendrive,
 )
 from .entity._spawn import SpawnLocation, SpawnTransform
@@ -283,12 +282,14 @@ class BaseScenario(ABC):
     # ------------------------------------------------------------------
 
     def _setup_ego_spawn(self) -> OpenDrivePose:
-        """Convert the Lanelet2 spawn pose to CARLA and update ego_config.
+        """Place the Lanelet2 spawn pose in CARLA and update ego_config.
 
-        Converts :attr:`_spawn_pose` through OpenDRIVE to a CARLA world
-        position, snaps it to the road surface, updates :attr:`ego_config`
-        with the resulting spawn location, and registers spectator-follow
-        and position-logging callbacks.
+        Snaps :attr:`_spawn_pose` onto the road surface as the Lanelet2 pose it
+        is -- x and y from the centreline of the lanelet it names, height from
+        the world below -- updates :attr:`ego_config` with the resulting spawn
+        location, and registers spectator-follow and position-logging
+        callbacks.  The equivalent :class:`OpenDrivePose` is derived alongside
+        for its lane metadata, and returned.
 
         The snapped pose is also the one an ego that plans its own route
         localizes at, so this hands it to :meth:`register_route_to_goal` on the
@@ -306,21 +307,20 @@ class BaseScenario(ABC):
             msg = f"spawn_pose is required for {type(self).__name__}"
             raise ValueError(msg)
         ll2_pose = self._spawn_pose
-        od_pose = to_opendrive(ll2_pose)
         world = self.world
-        # Position from the OpenDRIVE pose: `get_waypoint_xodr` resolves
-        # (road, lane, s) against CARLA's own geometry, which names the surface
-        # unambiguously where a stacked road would otherwise be picked by
-        # proximity alone.
+        # Placed as the Lanelet2 pose it was written as, on the centreline of
+        # the lanelet the author named.
         snapped = snap_to_carla_road(
-            od_pose, world, ground_projection=self._ground_projection
+            ll2_pose, world, ground_projection=self._ground_projection
         )
-        # Heading from the lanelet, which is the frame this spawn was named in.
-        # The road's own direction disagrees with it on a left-hand-traffic map
-        # converted from Lanelet2 -- by about 180 degrees on most of one Odaiba
-        # route -- so taking the road's would spawn the ego facing back down its
-        # lane. Only the yaw is replaced; the waypoint's position stands.
-        snapped = replace(snapped, yaw=to_carla_world(ll2_pose).yaw)
+        # The OpenDRIVE pose is still derived, because callers need its lane
+        # metadata -- the lane-change target lane, the road id a route condition
+        # watches.  It is read off where the ego actually is, not converted
+        # from the Lanelet2 pose: on a map where the two disagree that
+        # conversion can name the lane on the other side of the reference line,
+        # while EntityLanePositionCondition reads the lane off the actor's CARLA
+        # position -- a target derived from the converted lane could never match.
+        od_pose = to_opendrive(snapped)
 
         logger.info(
             "Lanelet %d -> OpenDRIVE road='%s' lane=%d s=%.1f -> "

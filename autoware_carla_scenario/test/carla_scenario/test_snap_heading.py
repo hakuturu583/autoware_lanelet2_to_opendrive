@@ -80,14 +80,13 @@ def _transforms(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_a_lanelet_pose_keeps_its_lanelets_heading(_transforms: None) -> None:
     """Snapping a Lanelet2 pose must not adopt the reference line's direction."""
-    snapped = snap_module._snap_lanelet2_via_opendrive(
+    snapped = snap_module._snap_lanelet2_to_its_centreline(
         Lanelet2Pose(lanelet_id=83, s=102.87),
         world=object(),  # type: ignore[arg-type]
         ground_projection=snap_module.GroundProjectionConfig(),
     )
 
     assert snapped.yaw == pytest.approx(_LANELET_YAW)
-    # The position still comes from the OpenDRIVE round-trip, which is what
-    # puts it on the surface CARLA trusts.
+    # The position comes from the lanelet too (only the height from CARLA).
     assert snapped.x == pytest.approx(-2884.7)
     assert snapped.y == pytest.approx(3035.4)

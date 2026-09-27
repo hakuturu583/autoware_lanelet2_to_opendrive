@@ -52,6 +52,11 @@ logger = logging.getLogger(__name__)
 #: Polling interval while waiting for the interface node to spawn the ego actor.
 _ATTACH_POLL_INTERVAL_S: float = 0.5
 
+#: Pause after each tick taken while waiting for the ego to appear.  Matches the
+#: usual ``fixed_delta_seconds``, so the wait advances the world at roughly real
+#: time instead of as fast as the server will step it.
+_ATTACH_TICK_PAUSE_S: float = 0.05
+
 #: How far, horizontally, the ego may be from where the scenario expected it
 #: before that disagreement is worth a warning.  Snapping a spawn onto the road
 #: surface moves it by centimetres; a spawn_point that does not match moves it
@@ -236,7 +241,8 @@ class AutowareEgoEntity(EgoVehicle):
         # goal against its lanelet's angle, finds ~180 degrees against a 45
         # degree threshold, and answers "Goal is not valid!" -- every route
         # request comes back "The planned route is empty" and the scenario never
-        # becomes ready.
+        # becomes ready. The OpenDRIVE round trip would also move the position
+        # (see snap_to_carla_road), and the goal needs no OpenDRIVE metadata.
         projection = ground_projection or GroundProjectionConfig()
 
         def _snap(pose: "Lanelet2Pose", what: str) -> "CarlaWorldPose":
@@ -372,7 +378,42 @@ class AutowareEgoEntity(EgoVehicle):
                     "autoware_carla_interface is running and launched with "
                     "ego_vehicle_role_name:=Ego."
                 )
+            self._advance_while_waiting(world)
+
+    def _advance_while_waiting(self, world: "carla.World") -> None:
+        """Step the world once while waiting for the interface to spawn the ego.
+
+        The interface node does not spawn the ego until it has seen the world
+        advance: an observed tick is how it tells a scenario world that is being
+        driven from the asynchronous one CARLA starts on.  At this point in the
+        run nothing else drives the clock -- the tick loop only begins once the
+        ego is attached -- so polling without ticking deadlocks, each side
+        waiting for the other.  The symptom is a runner that sits at "Spawning
+        ego vehicle ..." while the interface logs that it is still waiting for
+        the runner to drive its world, and a CARLA with no vehicles in it.
+
+        An asynchronous world advances on its own and ticking it would race the
+        server's own stepping, so there this only waits.
+        """
+        try:
+            synchronous = world.get_settings().synchronous_mode
+        except (AttributeError, RuntimeError):
+            # A world that will not report its settings is one this should not
+            # be stepping; fall back to waiting.
+            synchronous = False
+        if not synchronous:
             time.sleep(_ATTACH_POLL_INTERVAL_S)
+            return
+        # The scenario's own actors are already spawned by the time the ego is
+        # attached, and the runner does not start holding them until the warm-up
+        # after this returns.  Ticking without the hold would let a car parked on
+        # a slope roll away, changing the layout the scenario was written for
+        # before its clock has started.
+        from ..utils.vehicles import hold_vehicles_still  # noqa: PLC0415
+
+        hold_vehicles_still(world)
+        world.tick()
+        time.sleep(_ATTACH_TICK_PAUSE_S)
 
     def destroy(self) -> None:
         """Detach from the ego actor without destroying it.
