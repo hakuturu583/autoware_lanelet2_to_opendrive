@@ -113,7 +113,9 @@ class GrpcAutowareBridgeServer(AutowareBridge):
     ) -> None:
         self._config = config or AutowareBridgeConfig()
         self._lock = threading.Lock()
-        self._mission: Optional[Tuple[BridgePose, BridgePose, Tuple[BridgePose, ...]]] = None
+        self._mission: Optional[
+            Tuple[BridgePose, BridgePose, Tuple[BridgePose, ...]]
+        ] = None
         self._ready: bool = False
         self._closed: bool = False
 
