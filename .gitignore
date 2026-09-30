@@ -11,6 +11,8 @@ wheels/
 
 # Artifacts
 *.xodr
+# Generated with roadgen, which CI does not have -- see its generate.py.
+!autoware_carla_scenario/test/data/two_way_street/two_way_street.xodr
 *processed.osm
 
 # pytest-testmon
