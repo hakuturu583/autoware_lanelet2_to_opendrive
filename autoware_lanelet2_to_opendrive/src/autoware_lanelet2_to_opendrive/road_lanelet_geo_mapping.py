@@ -7,6 +7,15 @@ lanelet's **right** boundary.  Once the *reference lanelet* for a road is
 identified, adjacent lanelets are discovered via shared linestring IDs and
 assigned lane IDs that match the road's lane structure.
 
+A road with lanes on both sides of its reference line is two-way, as OpenDRIVE
+defines it: in RHT its right (negative) lanes run along the reference line and
+its left (positive) lanes against it, in LHT the other way round.  The
+reference line is then the centre line, and each side is matched on its own --
+the side running along it by a lanelet boundary in the reference line's
+direction, the side running against it by one in the opposite direction --
+because a lane across the centre line is never a neighbour in the lanelet
+walk: it runs the other way.
+
 The mapping is cached as ``<stem>.mapping.json`` next to the source XODR
 file and invalidated when either the XODR or OSM file content changes
 (SHA256 check).
@@ -33,6 +42,19 @@ if TYPE_CHECKING:
     from .opendrive.road import Road as ConverterRoad
 
 logger = logging.getLogger(__name__)
+
+
+#: Version of the geometric matching in :func:`build_mapping`.  A cached mapping
+#: that matching built under an older version is rebuilt rather than trusted,
+#: since its file hashes still match -- the files did not change, the matching
+#: did.  2: two-way roads are matched one side at a time.
+GEOMETRY_MAPPING_VERSION = 2
+
+#: What a mapping was built by: the converter as it wrote the XODR (exact, and
+#: the only source of the stop-line and preprocessing records), or geometric
+#: matching of an XODR against a Lanelet2 map.
+BUILT_BY_CONVERSION = "conversion"
+BUILT_BY_GEOMETRY = "geometry"
 
 
 class MappingMismatchError(Exception):
@@ -116,6 +138,16 @@ class _RoadCandidates:
     candidates: list[tuple[float, int]]  # [(ranking_dist, lanelet_id), ...] ascending
     raw_dists: dict[int, float] = field(default_factory=dict)  # lid -> raw distance
     walk_lane_ids: list[int] = field(default_factory=list)  # Geometric walk order
+    #: The side of a two-way road that runs against its reference line, matched
+    #: against the reversed reference line.
+    against_reference: bool = False
+    #: One side of a two-way road: the direction alone tells it from the other.
+    two_way: bool = False
+
+    @property
+    def side(self) -> tuple[int, bool]:
+        """The road and side these candidates are for: a two-way road has two."""
+        return (self.road_id, self.against_reference)
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +171,11 @@ class GeoRoadLaneletMapping:
     #: apart from genuine mapping failures (#493).
     skipped_synthetic_roads: list[int] | None = None
     traffic_light_config: dict | None = None
+    #: :data:`BUILT_BY_CONVERSION` or :data:`BUILT_BY_GEOMETRY`; ``None`` in a
+    #: cache written before it was recorded.
+    built_by: str | None = None
+    #: :data:`GEOMETRY_MAPPING_VERSION` of a geometric build.
+    geometry_version: int | None = None
     _road_lane_to_lanelet: dict[tuple[int, int], int] = field(
         default_factory=dict,
         init=False,
@@ -182,7 +219,36 @@ class GeoRoadLaneletMapping:
             result["preprocessing_log"] = self.preprocessing_log
         if self.traffic_light_config is not None:
             result["traffic_light_config"] = self.traffic_light_config
+        if self.built_by is not None:
+            result["built_by"] = self.built_by
+        if self.geometry_version is not None:
+            result["geometry_version"] = self.geometry_version
         return result
+
+    def is_current(self) -> bool:
+        """Whether a cached copy of this mapping can still be trusted.
+
+        A conversion-time mapping always can: it is exact.  A geometric one only
+        if the matching that built it is the current one.  A cache from before
+        either was recorded is taken as the converter's when it carries what
+        only the converter writes, and otherwise as an old geometric build.
+        """
+        built_by = self.built_by
+        if built_by is None:
+            conversion_only = (
+                self.preprocessing_log,
+                self.stop_line_mapping,
+                self.skipped_stop_lines,
+                self.traffic_light_config,
+            )
+            built_by = (
+                BUILT_BY_CONVERSION
+                if any(field is not None for field in conversion_only)
+                else BUILT_BY_GEOMETRY
+            )
+        if built_by == BUILT_BY_CONVERSION:
+            return True
+        return self.geometry_version == GEOMETRY_MAPPING_VERSION
 
     @classmethod
     def from_dict(cls, data: dict) -> "GeoRoadLaneletMapping":
@@ -214,6 +280,8 @@ class GeoRoadLaneletMapping:
             skipped_stop_lines=skipped_stop_lines,
             skipped_synthetic_roads=data.get("skipped_synthetic_roads"),
             traffic_light_config=data.get("traffic_light_config"),
+            built_by=data.get("built_by"),
+            geometry_version=data.get("geometry_version"),
         )
 
 
@@ -556,11 +624,22 @@ def parse_roads_from_xodr(
 
         lanes_obj = Lanes(lane_sections=[lane_section])
 
+        # The road's traffic rule, which decides which lanelet boundary its
+        # reference line follows -- and, on a two-way road, which side runs
+        # along it.  Absent means OpenDRIVE's default, decided in matching.
+        rule_attr = road_elem.get("rule")
+        rule = (
+            TrafficRule(rule_attr)
+            if rule_attr in (TrafficRule.RHT.value, TrafficRule.LHT.value)
+            else None
+        )
+
         road = Road(
             id=road_id,
             junction=junction,
             plan_view=plan_view,
             lanes=lanes_obj,
+            rule=rule,
         )
         roads.append(road)
 
@@ -612,6 +691,8 @@ def _compute_all_candidates(
         synthetic divergence/merge connectors — see ``#493``).
     """
     all_rc: list[_RoadCandidates] = []
+    # Keyed by road: a two-way road with a side that found nothing is reported
+    # even when its other side found candidates.
     no_candidate_diag: dict[int, dict] = {}
 
     # Synthetic divergence/merge connecting roads (#291) have no backing
@@ -638,135 +719,199 @@ def _compute_all_candidates(
         # line was built from:
         #   RHT → left boundary  →  search lanelet_left
         #   LHT → right boundary →  search lanelet_right
+        two_way = any(lid > 0 for lid in lane_ids) and any(lid < 0 for lid in lane_ids)
         if road.rule is not None:
             is_rht = road.rule == TrafficRule.RHT
+        elif two_way:
+            # OpenDRIVE's default rule: a road that does not say is RHT.
+            is_rht = True
         else:
             is_rht = all(lid < 0 for lid in lane_ids)
 
-        boundaries = lanelet_left if is_rht else lanelet_right
-        bboxes = lanelet_left_bbox if is_rht else lanelet_right_bbox
-        ref_bbox = _bbox(ref_line)
+        if two_way:
+            # Each side on its own (see the module docstring).  The lanes running
+            # along the reference line are the negative ones in RHT, the
+            # positive ones in LHT; both sides are walked outwards from the
+            # centre, which is the same neighbour for either side.
+            along = sorted((lid for lid in lane_ids if (lid < 0) == is_rht), key=abs)
+            against = sorted((lid for lid in lane_ids if (lid < 0) != is_rht), key=abs)
+            sides = [(ref_line, along, False), (ref_line[::-1].copy(), against, True)]
+        else:
+            sides = [(ref_line, lane_ids, False)]
 
-        # Progressive fallback search with 3 levels:
-        #   1. Symmetric distance + direction check  (strictest)
-        #   2. Symmetric distance, no direction check (curved/long roads)
-        #   3. Directed distance, no direction check  (length mismatch)
-        #
-        # Symmetric distance is preferred because it penalises partial
-        # overlaps (e.g. an adjacent lane boundary covering part of a long
-        # reference line).  Directed distance is only used as a last resort
-        # for roads where the reference line is much longer than any single
-        # lanelet boundary.
-        _FALLBACK_LEVELS: list[tuple[bool, str]] = [
-            (True, "symmetric"),
-            (False, "symmetric"),
-            (False, "directed"),
-        ]
+        for side_line, side_lane_ids, against_reference in sides:
+            rc, diag = _road_side_candidates(
+                road,
+                side_line,
+                side_lane_ids,
+                is_rht,
+                two_way=two_way,
+                against_reference=against_reference,
+                lanelet_left=lanelet_left,
+                lanelet_right=lanelet_right,
+                lanelet_left_bbox=lanelet_left_bbox,
+                lanelet_right_bbox=lanelet_right_bbox,
+            )
+            if rc is not None:
+                all_rc.append(rc)
+            elif diag is not None and road.id not in no_candidate_diag:
+                no_candidate_diag[road.id] = diag
 
-        candidates: list[tuple[float, int]] = []
-        raw_dists: dict[int, float] = {}
-        best_rejected_dist: float = float("inf")
-        best_rejected_lid: Optional[int] = None
+    return all_rc, no_candidate_diag, skipped_synthetic
+
+
+def _road_side_candidates(
+    road: "ConverterRoad",
+    ref_line: np.ndarray,
+    lane_ids: list[int],
+    is_rht: bool,
+    *,
+    two_way: bool,
+    against_reference: bool,
+    lanelet_left: dict[int, np.ndarray],
+    lanelet_right: dict[int, np.ndarray],
+    lanelet_left_bbox: dict[int, tuple[float, float, float, float]],
+    lanelet_right_bbox: dict[int, tuple[float, float, float, float]],
+) -> tuple[Optional[_RoadCandidates], Optional[dict]]:
+    """Candidates for one road, or one side of a two-way road.
+
+    *ref_line* is the line the side's innermost lanelet boundary follows --
+    the reference line, or it reversed for the side running against it.
+    Returns the candidates, or ``None`` and a diagnostic when there are none.
+    """
+    boundaries = lanelet_left if is_rht else lanelet_right
+    bboxes = lanelet_left_bbox if is_rht else lanelet_right_bbox
+    ref_bbox = _bbox(ref_line)
+
+    # Progressive fallback search with 3 levels:
+    #   1. Symmetric distance + direction check  (strictest)
+    #   2. Symmetric distance, no direction check (curved/long roads)
+    #   3. Directed distance, no direction check  (length mismatch)
+    #
+    # Symmetric distance is preferred because it penalises partial
+    # overlaps (e.g. an adjacent lane boundary covering part of a long
+    # reference line).  Directed distance is only used as a last resort
+    # for roads where the reference line is much longer than any single
+    # lanelet boundary.
+    _FALLBACK_LEVELS: list[tuple[bool, str]] = [
+        (True, "symmetric"),
+        (False, "symmetric"),
+        (False, "directed"),
+    ]
+    if two_way:
+        # Both sides of a two-way road follow the same centre line, one
+        # each way: only the direction tells them apart, so it is never
+        # dropped here.
+        _FALLBACK_LEVELS = [(True, "symmetric"), (True, "directed")]
+
+    candidates: list[tuple[float, int]] = []
+    raw_dists: dict[int, float] = {}
+    best_rejected_dist: float = float("inf")
+    best_rejected_lid: Optional[int] = None
+    n_bbox_skip = 0
+    n_dir_skip = 0
+
+    # Pre-compute reference line endpoints for endpoint penalty
+    ref_start = ref_line[0]
+    ref_end = ref_line[-1]
+
+    for require_dir, metric in _FALLBACK_LEVELS:
+        candidates.clear()
+        raw_dists.clear()
+        best_rejected_dist = float("inf")
+        best_rejected_lid = None
         n_bbox_skip = 0
         n_dir_skip = 0
 
-        # Pre-compute reference line endpoints for endpoint penalty
-        ref_start = ref_line[0]
-        ref_end = ref_line[-1]
-
-        for require_dir, metric in _FALLBACK_LEVELS:
-            candidates.clear()
-            raw_dists.clear()
-            best_rejected_dist = float("inf")
-            best_rejected_lid = None
-            n_bbox_skip = 0
-            n_dir_skip = 0
-
-            for lid, boundary in boundaries.items():
-                if not _bboxes_overlap(ref_bbox, bboxes[lid]):
-                    n_bbox_skip += 1
-                    continue
-                if require_dir and not _same_direction(ref_line, boundary):
-                    n_dir_skip += 1
-                    continue
-                if metric == "symmetric":
-                    dist = _symmetric_mean_distance(boundary, ref_line)
-                else:
-                    dist = _directed_mean_distance(boundary, ref_line)
-                if dist <= _MATCH_THRESHOLD:
-                    # Endpoint proximity penalty for candidate ranking.
-                    # Correct matches have aligned start/end points;
-                    # wrong junction lanelets connect different roads and
-                    # have divergent endpoints.
-                    ep_start = min(
-                        float(np.linalg.norm(ref_start - boundary[0])),
-                        float(np.linalg.norm(ref_start - boundary[-1])),
-                    )
-                    ep_end = min(
-                        float(np.linalg.norm(ref_end - boundary[0])),
-                        float(np.linalg.norm(ref_end - boundary[-1])),
-                    )
-                    ranking_dist = dist + (ep_start + ep_end) * _ENDPOINT_WEIGHT
-                    candidates.append((ranking_dist, lid))
-                    raw_dists[lid] = dist
-                elif dist < best_rejected_dist:
-                    best_rejected_dist = dist
-                    best_rejected_lid = lid
-
-            if candidates:
-                if metric != "symmetric" or not require_dir:
-                    logger.debug(
-                        "Road %d: found %d candidates at fallback level "
-                        "(dir=%s, metric=%s)",
-                        road.id,
-                        len(candidates),
-                        require_dir,
-                        metric,
-                    )
-                break  # found candidates, no need to fall back further
-
-        candidates.sort()  # ascending by distance
+        for lid, boundary in boundaries.items():
+            if not _bboxes_overlap(ref_bbox, bboxes[lid]):
+                n_bbox_skip += 1
+                continue
+            if require_dir and not _same_direction(ref_line, boundary):
+                n_dir_skip += 1
+                continue
+            if metric == "symmetric":
+                dist = _symmetric_mean_distance(boundary, ref_line)
+            else:
+                dist = _directed_mean_distance(boundary, ref_line)
+            if dist <= _MATCH_THRESHOLD:
+                # Endpoint proximity penalty for candidate ranking.
+                # Correct matches have aligned start/end points;
+                # wrong junction lanelets connect different roads and
+                # have divergent endpoints.
+                ep_start = min(
+                    float(np.linalg.norm(ref_start - boundary[0])),
+                    float(np.linalg.norm(ref_start - boundary[-1])),
+                )
+                ep_end = min(
+                    float(np.linalg.norm(ref_end - boundary[0])),
+                    float(np.linalg.norm(ref_end - boundary[-1])),
+                )
+                ranking_dist = dist + (ep_start + ep_end) * _ENDPOINT_WEIGHT
+                candidates.append((ranking_dist, lid))
+                raw_dists[lid] = dist
+            elif dist < best_rejected_dist:
+                best_rejected_dist = dist
+                best_rejected_lid = lid
 
         if candidates:
-            # Compute geometric walk order for lane IDs.
-            # RHT walks right (leftmost → rightmost):
-            #   positive IDs descending + negative IDs ascending by abs
-            # LHT walks left (rightmost → leftmost):
-            #   negative IDs descending by abs + positive IDs ascending
-            positive = sorted([lid for lid in lane_ids if lid > 0])
-            negative = sorted([lid for lid in lane_ids if lid < 0], key=abs)
-            if is_rht:
-                walk_lane_ids = list(reversed(positive)) + negative
-            else:
-                walk_lane_ids = list(reversed(negative)) + positive
-
-            all_rc.append(
-                _RoadCandidates(
-                    road=road,
-                    road_id=road.id,
-                    lane_ids=lane_ids,
-                    is_rht=is_rht,
-                    ref_line=ref_line,
-                    candidates=candidates,
-                    raw_dists=dict(raw_dists),
-                    walk_lane_ids=walk_lane_ids,
+            if metric != "symmetric" or not require_dir:
+                logger.debug(
+                    "Road %d: found %d candidates at fallback level "
+                    "(dir=%s, metric=%s)",
+                    road.id,
+                    len(candidates),
+                    require_dir,
+                    metric,
                 )
-            )
-        else:
-            no_candidate_diag[road.id] = {
-                "lane_ids": lane_ids,
-                "is_rht": is_rht,
-                "rule": str(road.rule) if road.rule else None,
-                "ref_pts": len(ref_line),
-                "n_bbox_skip": n_bbox_skip,
-                "n_dir_skip": n_dir_skip,
-                "nearest_dist": round(best_rejected_dist, 3)
-                if best_rejected_lid is not None
-                else None,
-                "nearest_lid": best_rejected_lid,
-            }
+            break  # found candidates, no need to fall back further
 
-    return all_rc, no_candidate_diag, skipped_synthetic
+    candidates.sort()  # ascending by distance
+
+    if candidates:
+        # Compute geometric walk order for lane IDs.
+        # RHT walks right (leftmost → rightmost):
+        #   positive IDs descending + negative IDs ascending by abs
+        # LHT walks left (rightmost → leftmost):
+        #   negative IDs descending by abs + positive IDs ascending
+        # A side of a two-way road is one sign, walked from the centre out.
+        positive = sorted([lid for lid in lane_ids if lid > 0])
+        negative = sorted([lid for lid in lane_ids if lid < 0], key=abs)
+        if two_way:
+            walk_lane_ids = sorted(lane_ids, key=abs)
+        elif is_rht:
+            walk_lane_ids = list(reversed(positive)) + negative
+        else:
+            walk_lane_ids = list(reversed(negative)) + positive
+
+        return (
+            _RoadCandidates(
+                road=road,
+                road_id=road.id,
+                lane_ids=lane_ids,
+                is_rht=is_rht,
+                ref_line=ref_line,
+                candidates=candidates,
+                raw_dists=dict(raw_dists),
+                walk_lane_ids=walk_lane_ids,
+                against_reference=against_reference,
+                two_way=two_way,
+            ),
+            None,
+        )
+    return None, {
+        "side": ("against" if against_reference else "along") if two_way else None,
+        "lane_ids": lane_ids,
+        "is_rht": is_rht,
+        "rule": str(road.rule) if road.rule else None,
+        "ref_pts": len(ref_line),
+        "n_bbox_skip": n_bbox_skip,
+        "n_dir_skip": n_dir_skip,
+        "nearest_dist": round(best_rejected_dist, 3)
+        if best_rejected_lid is not None
+        else None,
+        "nearest_lid": best_rejected_lid,
+    }
 
 
 def _resolve_conflicts(
@@ -1221,7 +1366,7 @@ def build_mapping(
     # against currently unmatched lanelets.
     _RESCUE_THRESHOLD: float = _MATCH_THRESHOLD * 1.5
     assigned_rc_indices = set(assignment.keys())
-    rescued_road_ids: set[int] = set()
+    rescued_sides: set[tuple[int, bool]] = set()
     for rc_idx in range(len(all_rc)):
         if rc_idx in assigned_rc_indices:
             continue
@@ -1235,6 +1380,10 @@ def build_mapping(
             if lid in matched_lanelets:
                 continue
             if not _bboxes_overlap(ref_bbox, bboxes[lid]):
+                continue
+            # A two-way road's sides differ only in direction: without the
+            # check, a side could be rescued onto the other side's lanelets.
+            if rc.two_way and not _same_direction(rc.ref_line, boundary):
                 continue
             dist = _symmetric_mean_distance(boundary, rc.ref_line)
             if dist < best_dist:
@@ -1256,7 +1405,7 @@ def build_mapping(
             for lid, rid, lane_id in walk_result_rescue:
                 mapping[lid] = (rid, lane_id)
                 matched_lanelets.add(lid)
-            rescued_road_ids.add(rc.road_id)
+            rescued_sides.add(rc.side)
             logger.info(
                 "Rescue: road %d recovered via lanelet %d (dist=%.3f, lanes=%d/%d)",
                 rc.road_id,
@@ -1269,19 +1418,26 @@ def build_mapping(
     # -- Diagnostic summary ------------------------------------------------
     all_road_ids = {road.id for road in roads if road.plan_view and road.lanes}
     rc_road_ids = {rc.road_id for rc in all_rc}
-    assigned_road_ids = {all_rc[rc_idx].road_id for rc_idx in assignment}
+    # By side, not road: one side of a two-way road can be dropped while the
+    # other is assigned.
+    dropped_sides = {
+        rc.side for rc_idx, rc in enumerate(all_rc) if rc_idx not in assignment
+    }
 
     # Synthetic divergence/merge connectors are deliberately excluded from
     # matching (#493) — they have no source lanelet, so they are reported
     # separately rather than counted as 0-candidate matching failures.
-    roads_no_candidates = all_road_ids - rc_road_ids - skipped_synthetic
-    roads_dropped_phase2 = rc_road_ids - assigned_road_ids
+    roads_no_candidates = (
+        all_road_ids - rc_road_ids - skipped_synthetic
+    ) | no_candidate_diag.keys()
     roads_not_fully_mapped: list[tuple[int, tuple[int, ...]]] = []
     for rc_idx, cand_idx in assignment.items():
         rc = all_rc[rc_idx]
         mapped_lanes = {v[1] for k, v in mapping.items() if v[0] == rc.road_id}
         expected_lanes = set(rc.walk_lane_ids)
-        if mapped_lanes != expected_lanes:
+        # A two-way road's sides are separate entries, so the road's mapped
+        # lanes include the other side's: what matters is what this one lacks.
+        if not expected_lanes <= mapped_lanes:
             missing_lanes = expected_lanes - mapped_lanes
             roads_not_fully_mapped.append(
                 (rc.road_id, tuple(sorted(missing_lanes, key=abs)))
@@ -1304,8 +1460,9 @@ def build_mapping(
         for rid in sorted(roads_no_candidates)[:10]:
             diag = no_candidate_diag.get(rid)
             if diag:
+                side = f" ({diag['side']} side)" if diag["side"] else ""
                 tqdm.write(
-                    f"    road {rid}: rule={diag['rule']}, "
+                    f"    road {rid}{side}: rule={diag['rule']}, "
                     f"is_rht={diag['is_rht']}, "
                     f"lanes={diag['lane_ids']}, "
                     f"ref_pts={diag['ref_pts']}, "
@@ -1314,9 +1471,9 @@ def build_mapping(
                     f"nearest_dist={diag['nearest_dist']}m "
                     f"(lanelet {diag['nearest_lid']})"
                 )
-    if roads_dropped_phase2:
-        unrecovered = roads_dropped_phase2 - rescued_road_ids
-        rescued = roads_dropped_phase2 & rescued_road_ids
+    if dropped_sides:
+        unrecovered = {rid for rid, _ in dropped_sides - rescued_sides}
+        rescued = {rid for rid, _ in dropped_sides & rescued_sides}
         if unrecovered:
             msg = (
                 f"  [Diag] Phase 2: {len(unrecovered)} roads dropped "
@@ -1347,6 +1504,8 @@ def build_mapping(
         osm_sha256=osm_sha256,
         lanelet_to_road_and_lane=mapping,
         skipped_synthetic_roads=sorted(skipped_synthetic) or None,
+        built_by=BUILT_BY_GEOMETRY,
+        geometry_version=GEOMETRY_MAPPING_VERSION,
     )
 
 
@@ -1551,6 +1710,7 @@ def validate_and_save_mapping(
         skipped_stop_lines=skipped_stop_lines,
         skipped_synthetic_roads=sorted(_synthetic_connector_road_ids(roads)) or None,
         traffic_light_config=traffic_light_config,
+        built_by=BUILT_BY_CONVERSION,
     )
     json_path = save_mapping_json(conv_mapping, xodr_path)
     logger.info("Mapping JSON saved to %s", json_path)
@@ -1597,18 +1757,23 @@ def load_or_build_mapping(
                 and data.get("osm_sha256") == osm_sha256
             ):
                 mapping = GeoRoadLaneletMapping.from_dict(data)
-                tqdm.write(
-                    f"Loaded cached mapping from {cache_file} "
-                    f"({len(mapping.lanelet_to_road_and_lane)} entries)"
-                )
-                logger.info(
-                    "Loaded cached lanelet-to-road mapping from %s (%d entries)",
-                    cache_file,
-                    len(mapping.lanelet_to_road_and_lane),
-                )
-                return mapping
-            tqdm.write("Cache invalidated (SHA256 mismatch); rebuilding mapping...")
-            logger.info("Cache invalidated (SHA256 mismatch); rebuilding mapping")
+                if mapping.is_current():
+                    tqdm.write(
+                        f"Loaded cached mapping from {cache_file} "
+                        f"({len(mapping.lanelet_to_road_and_lane)} entries)"
+                    )
+                    logger.info(
+                        "Loaded cached lanelet-to-road mapping from %s (%d entries)",
+                        cache_file,
+                        len(mapping.lanelet_to_road_and_lane),
+                    )
+                    return mapping
+                # The files did not change, but the matching that built it did.
+                reason = "built by an older geometric matching"
+            else:
+                reason = "SHA256 mismatch"
+            tqdm.write(f"Cache invalidated ({reason}); rebuilding mapping...")
+            logger.info("Cache invalidated (%s); rebuilding mapping", reason)
         except (json.JSONDecodeError, KeyError, TypeError):
             logger.warning(
                 "Failed to load cached mapping from %s; rebuilding",

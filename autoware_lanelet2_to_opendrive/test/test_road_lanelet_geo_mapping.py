@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -560,3 +561,294 @@ class TestParseRoadsFromXodr:
         assert arc.curvature == pytest.approx(0.04)
         assert isinstance(pp3, ParamPoly3)
         assert pp3.cV == pytest.approx(0.1)
+
+
+# ---------------------------------------------------------------------------
+# Two-way roads: lanes on both sides of the reference line, running opposite ways
+# ---------------------------------------------------------------------------
+
+
+class TestTwoWayRoadMapping:
+    """A road with lanes on both sides of its reference line is two-way.
+
+    In OpenDRIVE the right (negative) lanes of an RHT road run along its
+    reference line and the left (positive) ones against it; LHT is the mirror.
+    The reference line is the centre line, and a Lanelet2 map draws the lane
+    against it with its bounds inverted -- so the lane across the centre line is
+    never a walk neighbour, and matching the whole road as one sweep either
+    stopped after the first lane or put a lane on the wrong side.
+
+    The maps here are built the way roadgen (and CARLA's towns) draw one: a
+    straight road along +x, the centre line shared, the opposite lanes using
+    the same linestrings inverted.
+    """
+
+    WIDTH = 3.5
+    LENGTH = 100.0
+
+    @classmethod
+    def _xodr(cls, left: list[int], right: list[int], rule: str | None) -> str:
+        rule_attr = f" rule='{rule}'" if rule else ""
+        lanes = lambda ids: "".join(f"<lane id='{i}' type='driving'/>" for i in ids)  # noqa: E731
+        return (
+            f"<OpenDRIVE><road id='1' junction='-1' length='{cls.LENGTH}'{rule_attr}>"
+            "<planView><geometry s='0.0' x='0.0' y='0.0' hdg='0.0' "
+            f"length='{cls.LENGTH}'><line/></geometry></planView>"
+            "<lanes><laneSection s='0.0'>"
+            f"<left>{lanes(left)}</left><center><lane id='0' type='none'/></center>"
+            f"<right>{lanes(right)}</right>"
+            "</laneSection></lanes></road></OpenDRIVE>"
+        )
+
+    @classmethod
+    def _map(cls, rht: bool, per_side: int) -> tuple[Any, dict[int, int]]:
+        """A two-way road's lanelets, and the lane each one should map to.
+
+        Lines run along +x at y = k * WIDTH; lanelet ids are 100 + lane id.
+        """
+        import lanelet2.core as ll2
+
+        ids = iter(range(1, 10_000))
+        lines = {}
+        for k in range(-per_side, per_side + 1):
+            # A point a metre, as a surveyed map has, so that the strictest
+            # (symmetric) matching level can find them.
+            y = k * cls.WIDTH
+            pts = [
+                ll2.Point3d(next(ids), float(x), y, 0.0)
+                for x in range(int(cls.LENGTH) + 1)
+            ]
+            lines[k] = ll2.LineString3d(next(ids), pts)
+
+        lanelet_map = ll2.LaneletMap()
+        expected: dict[int, int] = {}
+        for n in range(1, per_side + 1):
+            if rht:
+                # Right side (y < 0) runs along +x: lane -n.  Left side (y > 0)
+                # runs against it, bounds inverted: lane +n.
+                along = ll2.Lanelet(100 - n, lines[-(n - 1)], lines[-n])
+                against = ll2.Lanelet(100 + n, lines[n - 1].invert(), lines[n].invert())
+                expected[100 - n], expected[100 + n] = -n, n
+            else:
+                # LHT mirrors it: the left side (y > 0) runs along +x: lane +n.
+                along = ll2.Lanelet(100 + n, lines[n], lines[n - 1])
+                against = ll2.Lanelet(
+                    100 - n, lines[-n].invert(), lines[-(n - 1)].invert()
+                )
+                expected[100 + n], expected[100 - n] = n, -n
+            lanelet_map.add(along)
+            lanelet_map.add(against)
+        return lanelet_map, expected
+
+    @classmethod
+    def _mapping(
+        cls, rht: bool, per_side: int, rule: str | None
+    ) -> dict[int, tuple[int, int]]:
+        import lxml.etree as ET
+
+        from autoware_lanelet2_to_opendrive.road_lanelet_geo_mapping import (
+            build_mapping,
+        )
+
+        lanelet_map, _ = cls._map(rht, per_side)
+        xodr = cls._xodr(
+            left=list(range(1, per_side + 1)),
+            right=list(range(-1, -per_side - 1, -1)),
+            rule=rule,
+        )
+        roads = parse_roads_from_xodr(
+            Path("unused.xodr"), xodr_root=ET.fromstring(xodr)
+        )
+        mapping = build_mapping(lanelet_map, roads, (0.0, 0.0), "x", "o")
+        return dict(mapping.lanelet_to_road_and_lane)
+
+    @pytest.mark.parametrize("per_side", [1, 2])
+    def test_rht_maps_each_side_to_its_own_lanes(self, per_side: int) -> None:
+        _, expected = self._map(True, per_side)
+        mapping = self._mapping(True, per_side, rule="RHT")
+        assert mapping == {lid: (1, lane) for lid, lane in expected.items()}
+
+    @pytest.mark.parametrize("per_side", [1, 2])
+    def test_lht_maps_each_side_to_its_own_lanes(self, per_side: int) -> None:
+        _, expected = self._map(False, per_side)
+        mapping = self._mapping(False, per_side, rule="LHT")
+        assert mapping == {lid: (1, lane) for lid, lane in expected.items()}
+
+    def test_a_two_way_road_without_a_rule_is_rht(self) -> None:
+        """OpenDRIVE's default: a road that names no rule is right-hand traffic."""
+        _, expected = self._map(True, 1)
+        assert self._mapping(True, 1, rule=None) == {
+            lid: (1, lane) for lid, lane in expected.items()
+        }
+
+    def test_a_side_that_finds_nothing_is_reported(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The other side finding its lanelets does not hide this one's failure."""
+        import lanelet2.core as ll2
+        import lxml.etree as ET
+
+        from autoware_lanelet2_to_opendrive.road_lanelet_geo_mapping import (
+            build_mapping,
+        )
+
+        full, _ = self._map(True, 1)
+        lanelet_map = ll2.LaneletMap()
+        lanelet_map.add(full.laneletLayer[99])  # only the side along the line
+        roads = parse_roads_from_xodr(
+            Path("unused.xodr"), xodr_root=ET.fromstring(self._xodr([1], [-1], "RHT"))
+        )
+        with caplog.at_level("WARNING"):
+            mapping = build_mapping(lanelet_map, roads, (0.0, 0.0), "x", "o")
+        assert dict(mapping.lanelet_to_road_and_lane) == {99: (1, -1)}
+        assert "roads had 0 candidates" in caplog.text
+        assert "road IDs = [1]" in caplog.text
+
+    def test_a_dropped_side_is_not_rescued_onto_the_other_direction(self) -> None:
+        """A side lost in conflict resolution is rescued only in its direction.
+
+        Road 1 (one-way) and road 2 (two-way) share a centre line; road 1 wins
+        lanelet 99, so road 2's side along the line is dropped.  Lanelet 201
+        runs the other way on the same line and is left over: rescuing the
+        dropped side onto it would give it a lane of the wrong direction.
+        """
+        import lanelet2.core as ll2
+        import lxml.etree as ET
+
+        from autoware_lanelet2_to_opendrive.road_lanelet_geo_mapping import (
+            build_mapping,
+        )
+
+        lanelet_map, _ = self._map(True, 1)
+        against = lanelet_map.laneletLayer[101]
+        # Same left bound as 101 -- the centre line reversed -- so it ties
+        # with 101 for road 2's side against the line, and loses on its id.
+        lanelet_map.add(ll2.Lanelet(201, against.leftBound, against.rightBound))
+
+        def road(rid: int, left: str) -> str:
+            return (
+                f"<road id='{rid}' junction='-1' length='{self.LENGTH}' rule='RHT'>"
+                "<planView><geometry s='0.0' x='0.0' y='0.0' hdg='0.0' "
+                f"length='{self.LENGTH}'><line/></geometry></planView>"
+                "<lanes><laneSection s='0.0'>"
+                f"<left>{left}</left><center><lane id='0' type='none'/></center>"
+                "<right><lane id='-1' type='driving'/></right>"
+                "</laneSection></lanes></road>"
+            )
+
+        xodr = (
+            "<OpenDRIVE>"
+            + road(1, "")
+            + road(2, "<lane id='1' type='driving'/>")
+            + "</OpenDRIVE>"
+        )
+        roads = parse_roads_from_xodr(
+            Path("unused.xodr"), xodr_root=ET.fromstring(xodr)
+        )
+        mapping = build_mapping(lanelet_map, roads, (0.0, 0.0), "x", "o")
+        got = dict(mapping.lanelet_to_road_and_lane)
+        assert got[99] == (1, -1)
+        assert got[101] == (2, 1)
+        assert 201 not in got
+
+    def test_the_rule_is_read_from_the_road(self) -> None:
+        import lxml.etree as ET
+
+        from autoware_lanelet2_to_opendrive.opendrive.enums import TrafficRule
+
+        for rule, want in (
+            ("RHT", TrafficRule.RHT),
+            ("LHT", TrafficRule.LHT),
+            (None, None),
+        ):
+            xodr = self._xodr([1], [-1], rule)
+            (road,) = parse_roads_from_xodr(
+                Path("unused.xodr"), xodr_root=ET.fromstring(xodr)
+            )
+            assert road.rule == want
+
+
+# ---------------------------------------------------------------------------
+# Cache freshness: a mapping built by older matching is not trusted
+# ---------------------------------------------------------------------------
+
+
+class TestMappingCacheFreshness:
+    """The cache is keyed on the files, but the matching can change under it.
+
+    A geometric mapping cached before two-way roads were matched a side at a
+    time is still keyed by the same XODR and OSM hashes, so it would be loaded
+    as it was -- wrong -- for as long as the files stay put.  The cache now
+    records what built it, and a geometric build from older matching is rebuilt.
+    """
+
+    @staticmethod
+    def _mapping(**kwargs: Any) -> GeoRoadLaneletMapping:
+        return GeoRoadLaneletMapping(
+            xodr_sha256="x",
+            osm_sha256="o",
+            lanelet_to_road_and_lane={1: (1, -1)},
+            **kwargs,
+        )
+
+    def test_which_caches_are_trusted(self) -> None:
+        from autoware_lanelet2_to_opendrive.road_lanelet_geo_mapping import (
+            BUILT_BY_CONVERSION,
+            BUILT_BY_GEOMETRY,
+            GEOMETRY_MAPPING_VERSION,
+        )
+
+        assert self._mapping(built_by=BUILT_BY_CONVERSION).is_current()
+        assert self._mapping(
+            built_by=BUILT_BY_GEOMETRY, geometry_version=GEOMETRY_MAPPING_VERSION
+        ).is_current()
+        assert not self._mapping(
+            built_by=BUILT_BY_GEOMETRY, geometry_version=1
+        ).is_current()
+        # From before either was recorded: the converter's own when it carries
+        # what only the converter writes, an old geometric build otherwise.
+        assert self._mapping(stop_line_mapping={}).is_current()
+        assert self._mapping(preprocessing_log={}).is_current()
+        assert not self._mapping().is_current()
+
+    def test_what_built_it_survives_the_round_trip(self) -> None:
+        mapping = self._mapping(built_by="geometry", geometry_version=2)
+        back = GeoRoadLaneletMapping.from_dict(
+            json.loads(json.dumps(mapping.to_dict()))
+        )
+        assert (back.built_by, back.geometry_version) == ("geometry", 2)
+
+    def test_an_old_geometric_cache_is_rebuilt(self, tmp_path: Path) -> None:
+        import lxml.etree as ET
+
+        from autoware_lanelet2_to_opendrive.road_lanelet_geo_mapping import (
+            _sha256_of_file,
+            load_or_build_mapping,
+        )
+
+        xodr_text = TestTwoWayRoadMapping._xodr([1], [-1], "RHT")
+        xodr, osm = tmp_path / "street.xodr", tmp_path / "street.osm"
+        xodr.write_text(xodr_text)
+        osm.write_text("<osm/>")  # only its hash is read here
+        lanelet_map, expected = TestTwoWayRoadMapping._map(True, 1)
+        roads = parse_roads_from_xodr(xodr, xodr_root=ET.fromstring(xodr_text))
+
+        # What the old matching left behind for this street: one lanelet, on the
+        # wrong side, keyed by the very same files.
+        cache = tmp_path / "street.mapping.json"
+        stale = {
+            "xodr_sha256": _sha256_of_file(xodr),
+            "osm_sha256": _sha256_of_file(osm),
+            "lanelet_to_road_and_lane": {"101": [1, -1]},
+        }
+        cache.write_text(json.dumps(stale))
+        mapping = load_or_build_mapping(xodr, osm, lanelet_map, roads, (0.0, 0.0))
+        assert dict(mapping.lanelet_to_road_and_lane) == {
+            lid: (1, lane) for lid, lane in expected.items()
+        }
+        assert json.loads(cache.read_text())["built_by"] == "geometry"
+
+        # The converter's own mapping is exact, and kept whatever it says.
+        cache.write_text(json.dumps({**stale, "built_by": "conversion"}))
+        kept = load_or_build_mapping(xodr, osm, lanelet_map, roads, (0.0, 0.0))
+        assert dict(kept.lanelet_to_road_and_lane) == {101: (1, -1)}
