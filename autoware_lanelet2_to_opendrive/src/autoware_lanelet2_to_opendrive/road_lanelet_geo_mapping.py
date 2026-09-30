@@ -141,6 +141,13 @@ class _RoadCandidates:
     #: The side of a two-way road that runs against its reference line, matched
     #: against the reversed reference line.
     against_reference: bool = False
+    #: One side of a two-way road: the direction alone tells it from the other.
+    two_way: bool = False
+
+    @property
+    def side(self) -> tuple[int, bool]:
+        """The road and side these candidates are for: a two-way road has two."""
+        return (self.road_id, self.against_reference)
 
 
 # ---------------------------------------------------------------------------
@@ -684,6 +691,8 @@ def _compute_all_candidates(
         synthetic divergence/merge connectors — see ``#493``).
     """
     all_rc: list[_RoadCandidates] = []
+    # Keyed by road: a two-way road with a side that found nothing is reported
+    # even when its other side found candidates.
     no_candidate_diag: dict[int, dict] = {}
 
     # Synthetic divergence/merge connecting roads (#291) have no backing
@@ -886,10 +895,12 @@ def _road_side_candidates(
                 raw_dists=dict(raw_dists),
                 walk_lane_ids=walk_lane_ids,
                 against_reference=against_reference,
+                two_way=two_way,
             ),
             None,
         )
     return None, {
+        "side": ("against" if against_reference else "along") if two_way else None,
         "lane_ids": lane_ids,
         "is_rht": is_rht,
         "rule": str(road.rule) if road.rule else None,
@@ -1355,7 +1366,7 @@ def build_mapping(
     # against currently unmatched lanelets.
     _RESCUE_THRESHOLD: float = _MATCH_THRESHOLD * 1.5
     assigned_rc_indices = set(assignment.keys())
-    rescued_road_ids: set[int] = set()
+    rescued_sides: set[tuple[int, bool]] = set()
     for rc_idx in range(len(all_rc)):
         if rc_idx in assigned_rc_indices:
             continue
@@ -1369,6 +1380,10 @@ def build_mapping(
             if lid in matched_lanelets:
                 continue
             if not _bboxes_overlap(ref_bbox, bboxes[lid]):
+                continue
+            # A two-way road's sides differ only in direction: without the
+            # check, a side could be rescued onto the other side's lanelets.
+            if rc.two_way and not _same_direction(rc.ref_line, boundary):
                 continue
             dist = _symmetric_mean_distance(boundary, rc.ref_line)
             if dist < best_dist:
@@ -1390,7 +1405,7 @@ def build_mapping(
             for lid, rid, lane_id in walk_result_rescue:
                 mapping[lid] = (rid, lane_id)
                 matched_lanelets.add(lid)
-            rescued_road_ids.add(rc.road_id)
+            rescued_sides.add(rc.side)
             logger.info(
                 "Rescue: road %d recovered via lanelet %d (dist=%.3f, lanes=%d/%d)",
                 rc.road_id,
@@ -1403,13 +1418,18 @@ def build_mapping(
     # -- Diagnostic summary ------------------------------------------------
     all_road_ids = {road.id for road in roads if road.plan_view and road.lanes}
     rc_road_ids = {rc.road_id for rc in all_rc}
-    assigned_road_ids = {all_rc[rc_idx].road_id for rc_idx in assignment}
+    # By side, not road: one side of a two-way road can be dropped while the
+    # other is assigned.
+    dropped_sides = {
+        rc.side for rc_idx, rc in enumerate(all_rc) if rc_idx not in assignment
+    }
 
     # Synthetic divergence/merge connectors are deliberately excluded from
     # matching (#493) — they have no source lanelet, so they are reported
     # separately rather than counted as 0-candidate matching failures.
-    roads_no_candidates = all_road_ids - rc_road_ids - skipped_synthetic
-    roads_dropped_phase2 = rc_road_ids - assigned_road_ids
+    roads_no_candidates = (
+        all_road_ids - rc_road_ids - skipped_synthetic
+    ) | no_candidate_diag.keys()
     roads_not_fully_mapped: list[tuple[int, tuple[int, ...]]] = []
     for rc_idx, cand_idx in assignment.items():
         rc = all_rc[rc_idx]
@@ -1440,8 +1460,9 @@ def build_mapping(
         for rid in sorted(roads_no_candidates)[:10]:
             diag = no_candidate_diag.get(rid)
             if diag:
+                side = f" ({diag['side']} side)" if diag["side"] else ""
                 tqdm.write(
-                    f"    road {rid}: rule={diag['rule']}, "
+                    f"    road {rid}{side}: rule={diag['rule']}, "
                     f"is_rht={diag['is_rht']}, "
                     f"lanes={diag['lane_ids']}, "
                     f"ref_pts={diag['ref_pts']}, "
@@ -1450,9 +1471,9 @@ def build_mapping(
                     f"nearest_dist={diag['nearest_dist']}m "
                     f"(lanelet {diag['nearest_lid']})"
                 )
-    if roads_dropped_phase2:
-        unrecovered = roads_dropped_phase2 - rescued_road_ids
-        rescued = roads_dropped_phase2 & rescued_road_ids
+    if dropped_sides:
+        unrecovered = {rid for rid, _ in dropped_sides - rescued_sides}
+        rescued = {rid for rid, _ in dropped_sides & rescued_sides}
         if unrecovered:
             msg = (
                 f"  [Diag] Phase 2: {len(unrecovered)} roads dropped "

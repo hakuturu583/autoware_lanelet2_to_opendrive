@@ -611,10 +611,14 @@ class TestTwoWayRoadMapping:
         ids = iter(range(1, 10_000))
         lines = {}
         for k in range(-per_side, per_side + 1):
+            # A point a metre, as a surveyed map has, so that the strictest
+            # (symmetric) matching level can find them.
             y = k * cls.WIDTH
-            a = ll2.Point3d(next(ids), 0.0, y, 0.0)
-            b = ll2.Point3d(next(ids), cls.LENGTH, y, 0.0)
-            lines[k] = ll2.LineString3d(next(ids), [a, b])
+            pts = [
+                ll2.Point3d(next(ids), float(x), y, 0.0)
+                for x in range(int(cls.LENGTH) + 1)
+            ]
+            lines[k] = ll2.LineString3d(next(ids), pts)
 
         lanelet_map = ll2.LaneletMap()
         expected: dict[int, int] = {}
@@ -676,6 +680,76 @@ class TestTwoWayRoadMapping:
         assert self._mapping(True, 1, rule=None) == {
             lid: (1, lane) for lid, lane in expected.items()
         }
+
+    def test_a_side_that_finds_nothing_is_reported(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The other side finding its lanelets does not hide this one's failure."""
+        import lanelet2.core as ll2
+        import lxml.etree as ET
+
+        from autoware_lanelet2_to_opendrive.road_lanelet_geo_mapping import (
+            build_mapping,
+        )
+
+        full, _ = self._map(True, 1)
+        lanelet_map = ll2.LaneletMap()
+        lanelet_map.add(full.laneletLayer[99])  # only the side along the line
+        roads = parse_roads_from_xodr(
+            Path("unused.xodr"), xodr_root=ET.fromstring(self._xodr([1], [-1], "RHT"))
+        )
+        with caplog.at_level("WARNING"):
+            mapping = build_mapping(lanelet_map, roads, (0.0, 0.0), "x", "o")
+        assert dict(mapping.lanelet_to_road_and_lane) == {99: (1, -1)}
+        assert "roads had 0 candidates" in caplog.text
+        assert "road IDs = [1]" in caplog.text
+
+    def test_a_dropped_side_is_not_rescued_onto_the_other_direction(self) -> None:
+        """A side lost in conflict resolution is rescued only in its direction.
+
+        Road 1 (one-way) and road 2 (two-way) share a centre line; road 1 wins
+        lanelet 99, so road 2's side along the line is dropped.  Lanelet 201
+        runs the other way on the same line and is left over: rescuing the
+        dropped side onto it would give it a lane of the wrong direction.
+        """
+        import lanelet2.core as ll2
+        import lxml.etree as ET
+
+        from autoware_lanelet2_to_opendrive.road_lanelet_geo_mapping import (
+            build_mapping,
+        )
+
+        lanelet_map, _ = self._map(True, 1)
+        against = lanelet_map.laneletLayer[101]
+        # Same left bound as 101 -- the centre line reversed -- so it ties
+        # with 101 for road 2's side against the line, and loses on its id.
+        lanelet_map.add(ll2.Lanelet(201, against.leftBound, against.rightBound))
+
+        def road(rid: int, left: str) -> str:
+            return (
+                f"<road id='{rid}' junction='-1' length='{self.LENGTH}' rule='RHT'>"
+                "<planView><geometry s='0.0' x='0.0' y='0.0' hdg='0.0' "
+                f"length='{self.LENGTH}'><line/></geometry></planView>"
+                "<lanes><laneSection s='0.0'>"
+                f"<left>{left}</left><center><lane id='0' type='none'/></center>"
+                "<right><lane id='-1' type='driving'/></right>"
+                "</laneSection></lanes></road>"
+            )
+
+        xodr = (
+            "<OpenDRIVE>"
+            + road(1, "")
+            + road(2, "<lane id='1' type='driving'/>")
+            + "</OpenDRIVE>"
+        )
+        roads = parse_roads_from_xodr(
+            Path("unused.xodr"), xodr_root=ET.fromstring(xodr)
+        )
+        mapping = build_mapping(lanelet_map, roads, (0.0, 0.0), "x", "o")
+        got = dict(mapping.lanelet_to_road_and_lane)
+        assert got[99] == (1, -1)
+        assert got[101] == (2, 1)
+        assert 201 not in got
 
     def test_the_rule_is_read_from_the_road(self) -> None:
         import lxml.etree as ET
